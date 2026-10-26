@@ -1,0 +1,29 @@
+{
+  "plugin": "obsb-tasks",
+  "files": [
+    ".github/workflows/release.yml",
+    ".gitignore",
+    "README.md",
+    "manifest.json",
+    "package-lock.json",
+    "package.json",
+    "release-notes.md",
+    "scripts/build.mjs",
+    "scripts/export-release.mjs",
+    "scripts/test.mjs",
+    "src/codec.ts",
+    "src/main.ts",
+    "src/model.ts",
+    "src/store.ts",
+    "src/view.ts",
+    "styles.css",
+    "tests/model.test.mjs",
+    "tests/obsidian-mock.mjs",
+    "tests/preview-entry.mjs",
+    "tests/store.test.mjs",
+    "tests/view-entry.mjs",
+    "tests/view.test.mjs",
+    "tsconfig.json",
+    "versions.json"
+  ]
+}

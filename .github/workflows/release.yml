@@ -1,0 +1,35 @@
+name: Publish OBSB Tasks
+on:
+  push:
+    tags: ['[0-9]*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing tag matching manifest version
+        required: true
+        type: string
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.version || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+      - name: Publish BRAT assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module -e 'import fs from "node:fs"; const m=JSON.parse(fs.readFileSync("manifest.json")); if(m.version!==process.env.RELEASE_TAG) throw Error("Release tag must match manifest.version")'
+          gh release create "$RELEASE_TAG" dist/obsb-tasks/main.js dist/obsb-tasks/manifest.json dist/obsb-tasks/styles.css --verify-tag --title "$RELEASE_TAG" --notes-file release-notes.md

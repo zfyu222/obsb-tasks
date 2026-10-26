@@ -1,0 +1,16 @@
+{
+  "name": "obsb-tasks",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "check": "tsc --noEmit",
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/test.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "jsdom": "26.1.0",
+    "obsidian": "1.13.1",
+    "typescript": "5.9.3"
+  }
+}
