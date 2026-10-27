@@ -12,6 +12,7 @@
     "scripts/export-release.mjs",
     "scripts/test.mjs",
     "src/codec.ts",
+    "src/inspector.ts",
     "src/main.ts",
     "src/model.ts",
     "src/store.ts",

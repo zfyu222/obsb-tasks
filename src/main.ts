@@ -1,6 +1,6 @@
-import { Component, ItemView, MarkdownRenderer, Modal, Notice, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
-import { archivePlan, Board, Kind, localDay, newNode, periodNodes, sleepPlan, TaskNode, Tree, upsert } from './model';
-import { ARCHIVE, CURRENT, Files, ROOT, SLEEP, TaskStore } from './store';
+import { Modal, Notice, Plugin, TFile } from 'obsidian';
+import { TaskNode } from './model';
+import { ARCHIVE, CURRENT, Files, SLEEP, TaskStore } from './store';
 import { TaskView } from './view';
 
 export const VIEW = 'obsb-tasks-view';
@@ -48,13 +48,21 @@ class VaultFiles implements Files {
 }
 export default class TaskPlugin extends Plugin {
   store!: TaskStore;
+  private failedDrafts: TaskNode[] = [];
   async onload(): Promise<void> {
+    const data = await this.loadData(); this.failedDrafts = Array.isArray(data?.failedDrafts) ? data.failedDrafts : [];
     this.store = new TaskStore(new VaultFiles(this));
     this.registerView(VIEW, leaf => new TaskView(leaf, this));
     this.addRibbonIcon('list-tree', '打开任务管理', () => { void this.open().catch(report); });
     this.addCommand({ id: 'open', name: '打开任务管理', callback: () => { void this.open().catch(report); } });
     this.addCommand({ id: 'archive-completed', name: '全局归档已完成任务', callback: () => {
       void this.open().then(v => v.archive()).catch(report);
+    } });
+    this.addCommand({ id: 'unsaved-drafts', name: '查看未保存的节点草稿', callback: () => {
+      const modal = new Modal(this.app); modal.open();
+      el(modal.contentEl, 'h3', '未保存的节点草稿');
+      el(modal.contentEl, 'p', this.failedDrafts.length ? '关闭视图时保存失败的本机副本，可复制内容后手动核对；不会覆盖同步到达的新版本。' : '没有未保存的节点草稿。');
+      for (const draft of this.failedDrafts) { el(modal.contentEl, 'h4', draft.title); const text = el(modal.contentEl, 'textarea'); text.value = JSON.stringify(draft, null, 2); text.readOnly = true; text.rows = 8; }
     } });
     this.registerObsidianProtocolHandler('obsb-task', params => {
       if (params.vault && params.vault !== this.app.vault.getName()) { report('该链接属于其他知识库'); return; }
@@ -67,6 +75,11 @@ export default class TaskPlugin extends Plugin {
       }
     }));
     // No files are created until the user opens this plugin.
+  }
+  async keepDraft(node: TaskNode): Promise<void> {
+    this.failedDrafts = [...this.failedDrafts.filter(n => n.id !== node.id), structuredClone(node)];
+    await this.saveData({ failedDrafts: this.failedDrafts });
+    new Notice('未保存内容已保存在本机；可运行“查看未保存的节点草稿”找回', 8000);
   }
   async open(): Promise<TaskView> {
     let leaf = this.app.workspace.getLeavesOfType(VIEW)[0];
@@ -85,69 +98,6 @@ export class ConfirmModal extends Modal {
       try { await this.action(); this.close(); } finally { run.disabled = false; }
     });
     button(this.contentEl, '取消', () => this.close());
-  }
-  onClose(): void { this.contentEl.replaceChildren(); }
-}
-
-export class EditModal extends Modal {
-  private draft: TaskNode;
-  private busy = false;
-  constructor(private plugin: TaskPlugin, private board: Board, node: TaskNode,
-    private save: (node: TaskNode) => Promise<void>) {
-    super(plugin.app); this.draft = structuredClone(node);
-  }
-  onOpen(): void {
-    this.contentEl.classList.add('obsb-task-editor');
-    el(this.contentEl, 'h3', `${this.draft.kind === 'area' ? '领域' : '任务'}详情`);
-    const form = el(this.contentEl, 'form');
-    const text = (title: string, value: string, change: (value: string) => void, type = 'text'): HTMLInputElement => {
-      const label = el(form, 'label', title), input = el(label, 'input'); input.type = type; input.value = value;
-      input.addEventListener('input', () => change(input.value)); return input;
-    };
-    const select = (title: string, value: string, values: Record<string, string>, change: (value: string) => void): void => {
-      const label = el(form, 'label', title), input = el(label, 'select');
-      for (const [key, name] of Object.entries(values)) { const o = el(input, 'option', name); o.value = key; }
-      input.value = value; input.addEventListener('change', () => change(input.value));
-    };
-    const title = text('名称', this.draft.title, v => { this.draft.title = v; }); title.required = true;
-    const tree = new Tree(this.board.nodes), forbidden = new Set([this.draft.id, ...tree.descendants(this.draft.id).map(n => n.id)]);
-    const parentSearch = text('移动到父节点（搜索名称，最多显示 100 个候选）', '', () => populate());
-    const parentLabel = el(form, 'label', '父节点'), parent = el(parentLabel, 'select');
-    const populate = (): void => {
-      const selected = this.draft.parent, query = parentSearch.value.toLocaleLowerCase();
-      parent.replaceChildren(); const root = el(parent, 'option', 'root（不属于领域）'); root.value = '';
-      const candidates = this.board.nodes.filter(n => !forbidden.has(n.id) && (this.draft.kind !== 'area' || n.kind === 'area'));
-      const matches = candidates.filter(n => n.title.toLocaleLowerCase().includes(query)).slice(0, 100);
-      const old = selected ? tree.byId.get(selected) : undefined;
-      if (old && !matches.some(n => n.id === old.id)) matches.unshift(old);
-      for (const n of matches) { const o = el(parent, 'option', `${n.kind === 'area' ? '领域' : '任务'} · ${n.title}`); o.value = n.id; }
-      parent.value = selected ?? '';
-    };
-    populate(); parent.addEventListener('change', () => { this.draft.parent = parent.value || null; });
-    if (this.draft.kind === 'task') {
-      select('状态', this.draft.status, STATUS, v => { this.draft.status = v as TaskNode['status']; });
-      select('重要程度', this.draft.importance, IMPORTANCE, v => { this.draft.importance = v as TaskNode['importance']; });
-      text('截止日期', this.draft.deadline, v => { this.draft.deadline = v; }, 'date');
-      text('计划执行日期', this.draft.planned, v => { this.draft.planned = v; }, 'date');
-      for (const [key, name] of [['estimate', '预计工作量（小时）'], ['actual', '实际工作量（小时）']] as const) {
-        const input = text(name, String(this.draft[key] / 60), v => { this.draft[key] = v === '' ? 0 : Number(v) * 60; }, 'number');
-        input.min = '0'; input.step = '0.25';
-      }
-      text('完成时间（ISO，可留空自动填写）', this.draft.completed, v => { this.draft.completed = v; });
-      text('标签（逗号分隔）', this.draft.tags.join(', '), v => { this.draft.tags = v.split(/[,，]/).map(t => t.trim()).filter(Boolean); });
-    }
-    const label = el(form, 'label', '注释（Obsidian Markdown）'), notes = el(label, 'textarea');
-    notes.value = this.draft.notes; notes.rows = 10; notes.addEventListener('input', () => { this.draft.notes = notes.value; });
-    const error = el(form, 'p', '', 'obsb-task-error'); error.setAttribute('role', 'alert');
-    const submit = el(form, 'button', '保存'); submit.type = 'submit';
-    button(form, '取消', () => this.close());
-    form.addEventListener('submit', event => {
-      event.preventDefault(); if (this.busy) return;
-      this.busy = true; submit.disabled = true;
-      void this.save(this.draft).then(() => this.close()).catch(e => {
-        error.textContent = e instanceof Error ? e.message : String(e);
-      }).finally(() => { this.busy = false; submit.disabled = false; });
-    });
   }
   onClose(): void { this.contentEl.replaceChildren(); }
 }

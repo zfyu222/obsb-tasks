@@ -19,6 +19,17 @@
 .obsb-task-card.root { background:var(--background-secondary); }
 .obsb-task-card.done { opacity:0.7; }
 .obsb-task-card.context { border-style:dashed; }
+.obsb-task-card.is-selected { border-color:var(--interactive-accent); box-shadow:0 0 0 2px var(--interactive-accent); }
+.obsb-task-stage:focus { outline:none; }
+.obsb-task-stage:focus-visible { outline:1px solid var(--interactive-accent); outline-offset:-1px; }
+.obsb-task-inline-title { width:100%; min-width:0; font:inherit; }
+.obsb-task-properties { white-space:normal; }
+.obsb-task-properties label { display:flex; flex-direction:column; gap:4px; margin:10px 0; }
+.obsb-task-properties input,.obsb-task-properties select,.obsb-task-properties textarea { width:100%; min-width:0; }
+.obsb-task-properties textarea { resize:vertical; font-family:var(--font-monospace); }
+.obsb-task-save-state { color:var(--text-muted); font-size:var(--font-smallest); }
+.obsb-task-properties button { margin:4px 4px 4px 0; }
+.obsb-task-properties [hidden] { display:none !important; }
 .obsb-task-card > button:first-child { display:block; width:100%; border:0; background:transparent; box-shadow:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; padding:2px; }
 .obsb-task-card small { display:block; font-size:11px; color:var(--text-muted); overflow:hidden; white-space:nowrap; }
 .obsb-task-card > button:not(:first-child) { position:absolute; right:-30px; top:12px; padding:0 4px; min-height:24px; font-size:11px; }

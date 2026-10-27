@@ -86,9 +86,9 @@ export function validate(board: Board): Tree {
   }
   return new Tree(board.nodes);
 }
-export function upsert(board: Board, node: TaskNode): Board {
+export function upsert(board: Board, node: TaskNode, afterId?: string): Board {
   const oldTree = new Tree(board.nodes), old = oldTree.byId.get(node.id);
-  if (old && node.status === 'done' && oldTree.descendants(node.id).some(n => n.kind === 'task' && n.status !== 'done')) {
+  if (old && node.kind === 'task' && node.status === 'done' && oldTree.descendants(node.id).some(n => n.kind === 'task' && n.status !== 'done')) {
     throw new Error('还有未完成子任务，请先处理后再完成父任务');
   }
   const next = { ...node, title: node.title.trim(), updated: now() };
@@ -97,7 +97,9 @@ export function upsert(board: Board, node: TaskNode): Board {
   }
   const nodes = board.nodes.filter(n => n.id !== node.id);
   // Preserve sibling order when editing.
-  if (old) nodes.splice(board.nodes.indexOf(old), 0, next); else nodes.push(next);
+  if (old) nodes.splice(board.nodes.indexOf(old), 0, next);
+  else if (afterId && oldTree.byId.get(afterId)?.parent === node.parent) nodes.splice(nodes.findIndex(n => n.id === afterId) + 1, 0, next);
+  else nodes.push(next);
   const result: Board = { ...board, revision: uid(), nodes }; validate(result); return result;
 }
 export function archivePlan(board: Board): { ids: Set<string>; skipped: number } {

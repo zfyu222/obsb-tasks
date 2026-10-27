@@ -83,3 +83,9 @@ test('deep chain uses iterative traversal without stack overflow', () => {
   const extracted = extract(b, archivePlan(b).ids, 'archive');
   assert.equal(extracted.next.nodes.length, 0); assert.equal(extracted.batch.context.length, 0);
 });
+test('area with subareas cannot become task, task below task cannot become area', () => {
+  const area = node('area'), subarea = node('area', area.id);
+  assert.throws(() => upsert(board([area, subarea]), { ...area, kind: 'task' }), /任务下不能挂领域/);
+  const parent = node(), child = node('task', parent.id);
+  assert.throws(() => upsert(board([parent, child]), { ...child, kind: 'area' }), /任务下不能挂领域/);
+});
