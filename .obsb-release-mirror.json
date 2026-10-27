@@ -18,6 +18,7 @@
     "src/graph-layout.ts",
     "src/graph-viewport.ts",
     "src/inspector.ts",
+    "src/legacy-codec.ts",
     "src/main.ts",
     "src/model.ts",
     "src/store.ts",

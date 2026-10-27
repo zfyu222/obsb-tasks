@@ -100,8 +100,8 @@ test('moves validate task/area parentage and cycles, reorder siblings, then undo
   assert.throws(() => moveTasks(original, [b.id], t.id, 'child'), /任务下不能挂领域/);
   const moved = moveTasks(original, [t.id, c.id], b.id, 'child'); assert.equal(moved.nodes.find(n => n.id === t.id).parent, b.id); assert.equal(moved.nodes.find(n => n.id === c.id).parent, t.id);
   const history = new TaskHistory(); history.record(original, moved); const command = history.peek();
-  const restored = history.apply(moved, command); history.accept(); assert.deepEqual(restored.nodes, original.nodes);
-  const redone = history.apply(restored, history.peek(true), true); history.accept(true); assert.deepEqual(redone.nodes, moved.nodes);
+  const restored = history.apply(moved, command); history.accept(); assert.deepEqual(restored.nodes, new Tree(original.nodes).order);
+  const redone = history.apply(restored, history.peek(true), true); history.accept(true); assert.deepEqual(redone.nodes, new Tree(moved.nodes).order);
   const reordered = moveTasks(original, [sibling.id], t.id, 'before'); assert.deepEqual(new Tree(reordered.nodes).children.get(a.id).map(n => n.id), [sibling.id, t.id]);
   const deleted = deleteTasks(original, [t.id, c.id]); assert.equal(deleted.nodes.length, original.nodes.length - 2);
 });
@@ -110,4 +110,15 @@ test('extracted layout handles a 10k deep chain without recursion overflow', () 
   for (let i = 0; i < 10000; i++) { const n = node('深层任务', 'task', parent); nodes.push(n); parent = n.id; }
   const g = layoutGraph(new Tree(nodes), new Set(nodes.map(n => n.id)), new Set(), undefined, 'right');
   assert.equal(g.order.length, 10001); assert.ok(Number.isFinite(g.bounds.width)); assert.ok(g.bounds.width > 100000);
+});
+
+test('pure Markdown sibling reorders and bulk undo retain order even with identical timestamps', () => {
+  const nodes = Array.from({ length: 10000 }, (_, i) => node(`任务${i}`, 'task'));
+  const original = board(nodes), reordered = board([...nodes.slice(1), nodes[0]]);
+  const history = new TaskHistory(); history.record(original, reordered);
+  assert.ok(history.peek(), 'a reorder without property changes is still a command');
+  const restored = history.apply(reordered, history.peek()); history.accept();
+  assert.deepEqual(restored.nodes.map(n => n.id), nodes.map(n => n.id));
+  const redone = history.apply(restored, history.peek(true), true);
+  assert.deepEqual(redone.nodes.map(n => n.id), reordered.nodes.map(n => n.id));
 });

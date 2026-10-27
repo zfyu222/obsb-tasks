@@ -1,7 +1,7 @@
 {
   "id": "obsb-tasks",
   "name": "OBSB 任务管理",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "minAppVersion": "1.6.0",
   "description": "以独立 Markdown 任务树管理领域、任务、归档与休眠领域。",
   "author": "OBSB",

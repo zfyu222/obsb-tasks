@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
 import { archivePlan, emptyBoard, extract, newNode, periodNodes, restore, sleepPlan, Tree, upsert, validate, validDate } from '../.test-build/model.mjs';
 import { batchFrom, boardFrom, decode, encodeBatch, encodeBoard } from '../.test-build/codec.mjs';
+import { encodeBoard as legacyBoard, encodeBatch as legacyBatch } from '../.test-build/legacy-codec.mjs';
 const node = (kind = 'task', parent = null, done = false) => ({ ...newNode(kind, parent), title: '任务 [测试] ^ 标题', status: done ? 'done' : 'todo', completed: done ? new Date().toISOString() : '' });
 const board = nodes => ({ ...emptyBoard(), nodes });
 
@@ -54,8 +55,8 @@ test('codec roundtrips rich Markdown, unknown properties and frontmatter', () =>
   const b = board([n]), text = encodeBoard(b, '---\ncustom: yes\n---\n\n# 自定义\n\n');
   assert.deepEqual(boardFrom(decode(text)), b); assert.match(decode(text).preamble, /custom: yes/);
   assert.equal(boardFrom(decode(text.replace('任务 \\[测试\\]', '新名称'))).nodes[0].title, '新名称 ^ 标题');
-  assert.throws(() => decode(`${text}\n用户节点外正文`), /节点外正文/);
-  assert.throws(() => decode(text.replace('<!-- obsb-end -->', '损坏')));
+  assert.throws(() => decode(`${text}\n用户节点外正文`), /缩进不正确/);
+  assert.throws(() => decode(text.replace(` ^${n.id}`, '')), /缺少稳定 ID/);
   const done = node('task', null, true), { batch } = extract(board([done]), new Set([done.id]), 'archive');
   assert.deepEqual(batchFrom(decode(encodeBatch(batch))), batch);
 });
@@ -64,6 +65,73 @@ test('period filters completion separately from creation, inclusive local calend
   assert.equal(periodNodes([n], 'completed', '2026-06-01', '2026-06-30').size, 1);
   assert.equal(periodNodes([n], 'created', '2026-06-01', '2026-06-30').size, 0);
   assert.throws(() => periodNodes([n], 'completed', '2026-07-01', '2026-06-01'));
+});
+
+test('Markdown hierarchy is authoritative, checkbox states and visible fields survive native edits', () => {
+  const area = { ...node('area'), title: 'AAA' }, task = { ...node(), title: '注册开发' }, child = { ...node('task', task.id), title: '需求确认' };
+  const b = board([area, task, child]);
+  let text = encodeBoard(b);
+  assert.match(text, /- 领域：AAA \^n-/); assert.doesNotMatch(text, /"parent"|"title"|obsb-node|obsb-end/);
+  // Reparent the complete task subtree by indenting its Markdown, retaining IDs.
+  const offset = text.indexOf('- [ ] 注册开发');
+  text = text.slice(0, offset) + text.slice(offset).split('\n').map(line => line ? `  ${line}` : line).join('\n');
+  text = text.replace('- [ ] 注册开发', '- [/] 注册开发').replace('- [ ] 需求确认', '- [x] 需求确认');
+  text = text.replace(`    <!-- obsb-meta`, `    [重要程度:: 高]\n    [截止日期:: 2026-11-10]\n    [预计工作量:: 8h]\n    [标签:: ["后端", "项目,一"]]\n    <!-- obsb-meta`);
+  const result = boardFrom(decode(text));
+  assert.equal(result.nodes[1].parent, area.id); assert.equal(result.nodes[2].parent, task.id);
+  assert.equal(result.nodes[1].status, 'doing'); assert.equal(result.nodes[1].importance, 'high');
+  assert.equal(result.nodes[1].deadline, '2026-11-10'); assert.equal(result.nodes[1].estimate, 480);
+  assert.deepEqual(result.nodes[1].tags, ['后端', '项目,一']);
+  assert.equal(result.nodes[2].status, 'done'); assert.ok(result.nodes[2].completed);
+  const markers = { todo: ' ', doing: '/', waiting: '?', done: 'x', cancelled: '-' };
+  for (const [status, marker] of Object.entries(markers)) {
+    const value = { ...node(), status, completed: status === 'done' ? new Date().toISOString() : '' };
+    const encoded = encodeBoard(board([value])); assert.ok(encoded.includes(`- [${marker}] `));
+    assert.equal(boardFrom(decode(encoded)).nodes[0].status, status);
+  }
+});
+
+test('note envelope preserves task-looking lists, fences, callouts, whitespace and trailing newlines', () => {
+  const notes = '- [x] 注释里的复选框 ^n-not-a-node\n- 领域：也不是节点 ^n-not-area\n\n> [!tip]\n> [[笔记]]\n\n```md\n- [ ] 代码里的任务 ^n-code\n```\n\n| 列 | 值 |\n| - | - |\n| a | b |\n  \n\n';
+  const n = { ...node(), notes }, b = board([n]);
+  const decoded = boardFrom(decode(encodeBoard(b)));
+  assert.equal(decoded.nodes.length, 1); assert.equal(decoded.nodes[0].notes, notes);
+  assert.deepEqual(decoded, b);
+});
+
+test('malformed indentation, duplicate IDs/fields, unknown fields and unquoted notes stop writes', () => {
+  const n = { ...node(), importance: 'high' }, text = encodeBoard(board([n]));
+  for (const changed of [
+    text.replace('- [ ]', '  - [ ]'),
+    text.replace('- [ ]', ' - [ ]'),
+    text + `- [ ] 重复 ^${n.id}\n`,
+    text.replace('[重要程度:: 高]', '[重要程度:: 高]\n  [重要程度:: 低]'),
+    text.replace('[重要程度:: 高]', '[优先级别:: 高]'),
+    text + '  普通正文没有引用前缀\n',
+    text.replace('"format":2', '"format":99'),
+    text.replace('[重要程度:: 高]', '[预计工作量:: -8h]')
+  ]) assert.throws(() => decode(changed));
+});
+
+test('new handwritten nodes accept defaults with explicit stable IDs and Markdown notes', () => {
+  const text = encodeBoard(board([])) + '- 领域：游戏系统 ^n-game\n  - [ ] 完成技能开发 ^n-skill\n    > 参考 [[技能设计]]\n';
+  const decoded = boardFrom(decode(text));
+  assert.equal(decoded.nodes[1].parent, 'n-game'); assert.equal(decoded.nodes[1].importance, 'medium');
+  assert.equal(decoded.nodes[1].notes, '参考 [[技能设计]]');
+  assert.equal(decode(encodeBoard(decoded)).nodes[1].id, 'n-skill');
+});
+
+test('legacy documents convert without losing node fields, nested context or domain task state', () => {
+  const area = { ...node('area', null, true), custom: { nested: '-->' }, estimate: 1.234e-7, tags: ['a,b', '[]'] };
+  const parent = node('task', area.id), child = node('task', parent.id, true), b = board([area, parent, child]);
+  const old = legacyBoard(b); assert.equal(decode(old).format, 1);
+  assert.deepEqual(boardFrom(decode(encodeBoard(boardFrom(decode(old))))), b);
+  const { batch } = extract(b, new Set([child.id]), 'archive');
+  const original = batchFrom(decode(legacyBatch(batch))), converted = batchFrom(decode(encodeBatch(original)));
+  const sort = values => [...values].sort((a, b) => a.id.localeCompare(b.id));
+  assert.deepEqual(sort(converted.context), sort(original.context)); assert.deepEqual(converted.nodes, original.nodes);
+  assert.doesNotMatch(encodeBatch(batch), /"context"|"parent"/);
+  assert.match(encodeBatch(batch), /\[归档上下文:: 是\]/);
 });
 test('1k / 10k / 50k wide boards: parse, validate, archive plan and serialization benchmark', t => {
   for (const count of [1000, 10000, 50000]) {

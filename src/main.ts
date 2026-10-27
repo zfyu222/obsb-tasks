@@ -55,6 +55,16 @@ export default class TaskPlugin extends Plugin {
     this.registerView(VIEW, leaf => new TaskView(leaf, this));
     this.addRibbonIcon('list-tree', '打开任务管理', () => { void this.open().catch(report); });
     this.addCommand({ id: 'open', name: '打开任务管理', callback: () => { void this.open().catch(report); } });
+    this.addCommand({ id: 'migrate-markdown', name: '迁移任务文件为可读 Markdown（先备份）', callback: () => {
+      void (async () => {
+        const views = this.app.workspace.getLeavesOfType(VIEW).map(leaf => leaf.view as TaskView);
+        for (const view of views) await view.prepareMigration();
+        const count = await this.store.migrate();
+        this.store.invalidate();
+        for (const view of views) await view.reload();
+        new Notice(`已转换 ${count} 个任务文件；旧格式原文保存在 Raw/任务管理/格式备份。`);
+      })().catch(report);
+    } });
     this.addCommand({ id: 'archive-completed', name: '全局归档已完成任务', callback: () => {
       void this.open().then(v => v.archive()).catch(report);
     } });

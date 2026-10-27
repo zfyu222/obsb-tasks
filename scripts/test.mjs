@@ -1,6 +1,6 @@
 import { build } from 'esbuild';
 import { spawnSync } from 'node:child_process';
-await build({ entryPoints: ['src/model.ts', 'src/codec.ts', 'src/store.ts'], outdir: '.test-build', bundle: true,
+await build({ entryPoints: ['src/model.ts', 'src/codec.ts', 'src/legacy-codec.ts', 'src/store.ts'], outdir: '.test-build', bundle: true,
   platform: 'node', format: 'esm', outExtension: { '.js': '.mjs' } });
 await build({ entryPoints: ['tests/view-entry.mjs'], outfile: '.test-build/view.mjs', bundle: true,
   platform: 'node', format: 'esm', alias: { obsidian: './tests/obsidian-mock.mjs' } });

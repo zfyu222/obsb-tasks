@@ -64,6 +64,7 @@ export class TaskView extends ItemView {
     this.actions = next.catch(() => {}); return next;
   }
   private async flush(): Promise<void> { await this.draft?.flush(); }
+  async prepareMigration(): Promise<void> { await this.run(async () => { await this.flush(); }); }
   private async select(id: string | null): Promise<void> {
     await this.flush(); this.inlineId = null; this.selected = id;
     this.selectedIds = new Set(id ? [id] : []);

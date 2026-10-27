@@ -99,7 +99,7 @@ test('root supports Enter; area Enter creates an area sibling without copying ta
   key(view.contentEl.querySelector('.obsb-task-inline-title'), 'Enter'); await tick();
   find(view.contentEl, '▣ AAA领域').click(); await tick();
   key(view.contentEl.querySelector('.obsb-task-stage'), 'Enter'); await tick();
-  const nodes = (await plugin.store.load()).nodes, index = nodes.findIndex(n => n.id === area.id);
+  const nodes = (await plugin.store.load()).nodes.filter(n => n.parent === null), index = nodes.findIndex(n => n.id === area.id);
   assert.equal(nodes[index + 1].kind, 'area'); assert.equal(nodes[index + 1].parent, null);
   assert.equal(nodes[index + 1].notes, '');
   await view.onClose(); view.contentEl.remove();
@@ -188,7 +188,7 @@ test('selection flushes unblurred text, while external edits block save without 
   find(view.contentEl, '▣ AAA领域').click(); await tick();
   assert.ok((await plugin.store.load()).nodes.some(n => n.title === '切换前保存'));
   inputValue(field(view, 'title'), '旧表单草稿', false);
-  data.set(CURRENT, data.get(CURRENT).replace('## AAA领域', '## 外部修改领域'));
+  data.set(CURRENT, data.get(CURRENT).replace('领域：AAA领域', '领域：外部修改领域'));
   field(view, 'title').dispatchEvent(new dom.window.Event('change')); await tick();
   assert.match(view.contentEl.textContent, /其他窗口或设备/); assert.equal(field(view, 'title').value, '旧表单草稿');
   assert.match(data.get(CURRENT), /外部修改领域/); assert.doesNotMatch(data.get(CURRENT), /旧表单草稿/);
@@ -208,6 +208,23 @@ test('NodeDraft serializes rapid changes during a delayed write and retains all 
   release(); await Promise.all([first, second]);
   assert.equal(writes.length, 2); assert.equal(writes[1].revision, 'revision-1');
   assert.equal(writes[1].node.title, '新名称'); assert.equal(writes[1].node.notes, '随后输入的注释'); assert.equal(draft.dirty, false);
+});
+
+test('canonical Markdown subtree order preserves move, sibling reorder and undo/redo through persistence', async () => {
+  const { view, plugin, area } = await setup();
+  try {
+    const root = view.board.nodes.find(n => n.title === '任务1'), child = view.board.nodes.find(n => n.title === '任务2');
+    await view.move([child.id], root.id, 'child');
+    assert.equal((await plugin.store.load()).nodes.find(n => n.id === child.id).parent, root.id);
+    await view.move([root.id], area.id, 'before');
+    assert.deepEqual((await plugin.store.load()).nodes.filter(n => n.parent === null).map(n => n.id), [root.id, area.id]);
+    await view.undo();
+    assert.deepEqual((await plugin.store.load()).nodes.filter(n => n.parent === null).map(n => n.id), [area.id, root.id]);
+    await view.undo();
+    assert.equal((await plugin.store.load()).nodes.find(n => n.id === child.id).parent, area.id);
+    await view.undo(true);
+    assert.equal((await plugin.store.load()).nodes.find(n => n.id === child.id).parent, root.id);
+  } finally { await view.onClose(); view.contentEl.remove(); }
 });
 test('archive nodes remain read-only and cannot be changed through diagram shortcuts', async () => {
   const { view, plugin } = await setup();
