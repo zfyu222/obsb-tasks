@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { TaskView, Modal, MarkdownRenderer, NodeDraft, newNode, emptyBoard, TaskStore, CURRENT, upsert } from '../.test-build/view.mjs';
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { pretendToBeVisual: true });
-Object.assign(globalThis, { window: dom.window, document: dom.window.document, requestAnimationFrame: dom.window.requestAnimationFrame.bind(dom.window) });
+Object.assign(globalThis, { window: dom.window, document: dom.window.document, requestAnimationFrame: dom.window.requestAnimationFrame.bind(dom.window), cancelAnimationFrame: dom.window.cancelAnimationFrame.bind(dom.window) });
 const tick = () => new Promise(resolve => setTimeout(resolve, 25));
 const find = (root, label) => [...root.querySelectorAll('button')].find(b => b.textContent === label);
 const key = (element, value, options = {}) => {
@@ -201,4 +201,30 @@ test('IME composition defers property writes until completed', async () => {
   await tick(); assert.equal(writes.length, 0);
   draft.patch({ title: '输入完成' }); draft.composition(false); await saving;
   assert.deepEqual(writes, ['输入完成']);
+});
+test('unified undo/redo covers inline titles, creation and properties without requiring selection', async () => {
+  const { view, plugin } = await setup(); const originalCount = view.board.nodes.length;
+  find(view.contentEl, '+ 任务').click(); await tick();
+  const id = view.board.nodes.at(-1).id;
+  let inline = view.contentEl.querySelector('.obsb-task-inline-title'); inputValue(inline, '可撤销的名称', false); key(inline, 'Enter'); await tick();
+  key(view.contentEl.querySelector('.obsb-task-stage'), 'z', { ctrlKey: true }); await tick();
+  assert.equal((await plugin.store.load()).nodes.find(n => n.id === id).title, '新任务');
+  key(view.contentEl.querySelector('.obsb-task-stage'), 'z', { ctrlKey: true }); await tick();
+  assert.equal((await plugin.store.load()).nodes.length, originalCount);
+  key(view.contentEl.querySelector('.obsb-task-stage'), 'y', { ctrlKey: true }); await tick();
+  assert.equal((await plugin.store.load()).nodes.at(-1).id, id);
+  key(view.contentEl.querySelector('.obsb-task-stage'), 'z', { ctrlKey: true, shiftKey: true }); await tick();
+  assert.equal((await plugin.store.load()).nodes.find(n => n.id === id).title, '可撤销的名称');
+  await view.onClose(); view.contentEl.remove();
+});
+test('Ctrl-click multi-select deletes whole selected subtrees in one undoable operation', async () => {
+  const { view, plugin, area } = await setup();
+  find(view.contentEl, '▣ AAA领域').click(); await tick();
+  const taskButton = find(view.contentEl, '○ 任务1'); taskButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, ctrlKey: true })); await tick();
+  assert.equal(view.selectedIds.size, 2);
+  key(view.contentEl.querySelector('.obsb-task-stage'), 'Delete'); await tick();
+  assert.equal((await plugin.store.load()).nodes.length, 0);
+  key(view.contentEl.querySelector('.obsb-task-stage'), 'z', { ctrlKey: true }); await tick();
+  const current = await plugin.store.load(); assert.equal(current.nodes.length, 3); assert.ok(current.nodes.some(n => n.id === area.id));
+  await view.onClose(); view.contentEl.remove();
 });

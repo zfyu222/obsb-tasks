@@ -40,6 +40,27 @@
 .obsb-task-editor textarea { font-family:var(--font-monospace); resize:vertical; }
 .obsb-task-editor form > button { margin-right:8px; }
 .obsb-task-notes { overflow-wrap:anywhere; }
+/* Layout/gesture conventions adapted from Enhancing Mindmap (MIT; bundled notice in main.js). */
+.obsb-task-map-controls { flex-shrink:0; overflow-x:auto; white-space:nowrap; gap:5px; padding:5px 0; }
+.obsb-task-map-controls button { flex-shrink:0; min-width:30px; height:30px; padding:3px 8px; }
+.obsb-task-map-controls select { flex-shrink:0; width:auto; }
+.obsb-task-map-controls .is-active { color:var(--text-on-accent); background:var(--interactive-accent); }
+.obsb-map-viewport { overflow:hidden; touch-action:none; cursor:default; background:var(--background-primary); background-image:radial-gradient(var(--background-modifier-border) 0.7px,transparent 0.7px); background-size:20px 20px; }
+.obsb-map-viewport.is-panning,.obsb-map-viewport.is-panning * { cursor:grabbing !important; user-select:none; }
+.obsb-map-world { position:absolute; left:0; top:0; width:0; height:0; transform-origin:0 0; pointer-events:none; }
+.obsb-map-paths { position:absolute; inset:0; width:100%; height:100%; overflow:hidden; pointer-events:none; }
+.obsb-core-node { box-sizing:border-box; min-height:0; padding:8px 10px; pointer-events:auto; user-select:none; border-color:var(--branch-color); border-radius:7px; background:var(--background-primary); }
+.obsb-core-node.area { background:var(--background-secondary); border-width:1.5px; }
+.obsb-core-node.root { background:var(--interactive-accent); color:var(--text-on-accent); border:0; border-radius:12px; }
+.obsb-core-node > button[data-map-title] { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; white-space:normal; line-height:21px; overflow:hidden; overflow-wrap:anywhere; height:auto; padding:0; margin:0; }
+.obsb-core-node small { line-height:16px; font-size:11px; }
+.obsb-core-node > button.obsb-map-fold { position:absolute; right:-20px; top:50%; transform:translateY(-50%); min-height:18px; height:18px; min-width:18px; width:18px; padding:0; border-radius:50%; border-color:var(--branch-color); }
+.obsb-core-node[data-direction=left] > button.obsb-map-fold { left:-20px; right:auto; }
+.obsb-core-node.drop-child { box-shadow:0 0 0 4px var(--interactive-accent); }
+.obsb-core-node.drop-before::before,.obsb-core-node.drop-after::after { content:''; position:absolute; left:0; right:0; height:3px; background:var(--interactive-accent); }
+.obsb-core-node.drop-before::before { top:-5px; }.obsb-core-node.drop-after::after { bottom:-5px; }
+.obsb-map-marquee { position:absolute; z-index:10; border:1px solid var(--interactive-accent); background:var(--interactive-accent); opacity:0.18; pointer-events:none; }
+.obsb-map-marquee[hidden] { display:none; }
 @media (max-width:700px) {
   .obsb-tasks { padding:8px; }
   .obsb-task-body { flex-direction:column; }

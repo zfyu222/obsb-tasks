@@ -1,11 +1,13 @@
 {
   "name": "obsb-tasks",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "check": "tsc --noEmit",
     "build": "node scripts/build.mjs",
-    "test": "node scripts/test.mjs"
+    "test": "node scripts/test.mjs",
+    "test:bundle": "node tests/bundle-smoke.mjs",
+    "preview:bundle": "node scripts/browser-preview.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

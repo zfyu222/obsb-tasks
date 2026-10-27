@@ -7,6 +7,8 @@ export class Plugin extends Component {
   registerEvent() {} addRibbonIcon() {}
   addCommand(command) { this.commands.set(command.id, command); }
   registerObsidianProtocolHandler(name, action) { this.protocols.set(name, action); }
+  async loadData() { return this.data ?? {}; }
+  async saveData(data) { this.data = structuredClone(data); }
 }
 export class ItemView extends Component {
   constructor(leaf) { super(); this.app = leaf.app; this.contentEl = document.createElement('div'); }

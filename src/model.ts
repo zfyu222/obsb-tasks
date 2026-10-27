@@ -163,3 +163,26 @@ export function localDay(value: string): string {
   const d = new Date(value);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+export function moveTasks(board: Board, ids: string[], targetId: string | null, placement: 'child' | 'before' | 'after'): Board {
+  const tree = validate(board), selected = new Set(ids);
+  const roots = ids.map(id => tree.byId.get(id)).filter((n): n is TaskNode => !!n && !tree.ancestors(n.id).some(a => selected.has(a.id)));
+  if (!roots.length) throw new Error('没有可移动节点');
+  const target = targetId ? tree.byId.get(targetId) : undefined;
+  if (targetId && !target) throw new Error('目标节点已不存在');
+  if (target && roots.some(n => n.id === target.id || tree.ancestors(target.id).some(a => a.id === n.id))) throw new Error('不能移动到自己的子树');
+  const parent = placement === 'child' ? targetId : target?.parent ?? null;
+  const rootIds = new Set(roots.map(n => n.id)), nodes = board.nodes.filter(n => !rootIds.has(n.id));
+  const moved = roots.map(n => ({ ...n, parent, updated: now() }));
+  let index = nodes.length;
+  if (target && placement !== 'child') index = nodes.findIndex(n => n.id === target.id) + (placement === 'after' ? 1 : 0);
+  nodes.splice(index, 0, ...moved);
+  const result = { ...board, revision: uid(), nodes }; validate(result); return result;
+}
+export function deleteTasks(board: Board, ids: string[]): Board {
+  const tree = validate(board), removed = new Set<string>();
+  for (const id of ids) {
+    if (!tree.byId.has(id)) continue; removed.add(id);
+    for (const child of tree.descendants(id)) removed.add(child.id);
+  }
+  const result = { ...board, revision: uid(), nodes: board.nodes.filter(n => !removed.has(n.id)) }; validate(result); return result;
+}

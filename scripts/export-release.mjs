@@ -7,7 +7,7 @@ const source = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 if (!process.argv[2]) throw Error('Usage: node scripts/export-release.mjs ABSOLUTE_TARGET');
 const target = resolve(process.argv[2]);
 if (target === source || !relative(source, target).startsWith('..' + sep) || !relative(target, source).startsWith('..' + sep)) throw Error('Export directory must be separate from plugin source');
-const roots = ['manifest.json', 'versions.json', 'package.json', 'package-lock.json', 'tsconfig.json', 'styles.css', 'README.md', 'release-notes.md', '.gitignore', 'src', 'tests', 'scripts', '.github'];
+const roots = ['manifest.json', 'versions.json', 'package.json', 'package-lock.json', 'tsconfig.json', 'styles.css', 'README.md', 'release-notes.md', 'THIRD_PARTY_NOTICES.md', '.gitignore', 'src', 'tests', 'scripts', '.github'];
 const owned = path => typeof path === 'string' && !path.includes('\\') && !path.startsWith('/') && !path.split('/').includes('..') && roots.some(root => path === root || path.startsWith(root + '/'));
 await mkdir(target, { recursive: true });
 if ((await lstat(target)).isSymbolicLink()) throw Error('Target must not be a symlink');
