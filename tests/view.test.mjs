@@ -124,6 +124,33 @@ test('sidebar edits autosave without closing the panel, and task/area conversion
   assert.equal(saved.kind, 'task'); assert.equal(saved.importance, 'high'); assert.equal(saved.deadline, '2026-12-01'); assert.equal(saved.estimate, 150);
   await view.onClose(); view.contentEl.remove();
 });
+test('completion picker uses local time, preserves the stored instant and auto-fills on completion', async () => {
+  const previousTimezone = process.env.TZ;
+  try {
+    for (const [timezone, expected] of [['Asia/Shanghai', '2026-10-27T10:30:45.123Z'], ['America/New_York', '2026-10-27T22:30:45.123Z']]) {
+      process.env.TZ = timezone;
+      const { view, plugin } = await setup();
+      try {
+        find(view.contentEl, '✓ 任务2').click(); await tick();
+        const id = view.board.nodes.find(n => n.title === '任务2').id;
+        const picker = field(view, 'completed');
+        assert.equal(picker.type, 'datetime-local');
+        assert.equal(new Date(picker.value).toISOString(), view.board.nodes.find(n => n.id === id).completed);
+        picker.focus(); inputValue(picker, '2026-10-27T18:30:45.123'); await tick();
+        assert.equal((await plugin.store.load()).nodes.find(n => n.id === id).completed, expected);
+        find(view.contentEl, '○ 任务1').click(); await tick();
+        inputValue(field(view, 'status'), 'done'); await tick();
+        assert.ok(field(view, 'completed').value, 'completing a task fills the picker');
+        assert.equal(new Date(field(view, 'completed').value).toISOString(), (await plugin.store.load()).nodes.find(n => n.title === '任务1').completed);
+        find(view.contentEl, '✓ 任务2').click(); await tick();
+        assert.equal(field(view, 'completed').value, '2026-10-27T18:30:45.123');
+      } finally { await view.onClose(); view.contentEl.remove(); }
+    }
+  } finally {
+    if (previousTimezone === undefined) delete process.env.TZ; else process.env.TZ = previousTimezone;
+  }
+});
+
 test('input shortcuts, IME selection, modifiers and key repeats do not create accidental nodes', async () => {
   const { view, plugin } = await setup();
   find(view.contentEl, '○ 任务1').click(); await tick();

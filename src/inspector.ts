@@ -46,6 +46,19 @@ export class NodeDraft {
 
 const statuses = { todo: '待办', doing: '进行中', waiting: '等待中', done: '已完成', cancelled: '已取消' };
 const importance = { high: '高', medium: '中', low: '低' };
+// datetime-local takes wall-clock time, while Markdown stores an absolute ISO instant.
+function localDateTime(iso: string): string {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return '';
+  const pad = (value: number, length = 2): string => String(value).padStart(length, '0');
+  return `${pad(date.getFullYear(), 4)}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}${date.getMilliseconds() ? `.${pad(date.getMilliseconds(), 3)}` : ''}`;
+}
+function completionInstant(local: string): string {
+  if (!local) return '';
+  const date = new Date(local);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : local;
+}
 function append<K extends keyof HTMLElementTagNameMap>(parent: HTMLElement, tag: K, text = ''): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag); e.textContent = text; parent.append(e); return e;
 }
@@ -79,7 +92,10 @@ export function inspector(parent: HTMLElement, draft: NodeDraft, board: Board, p
     const input = text(taskFields, name, key, String(draft.value[key] / 60), v => draft.patch({ [key]: v === '' ? 0 : Number(v) * 60 }), 'number');
     input.min = '0'; input.step = '0.25';
   }
-  text(taskFields, '完成时间（ISO，可留空自动填写）', 'completed', draft.value.completed, completed => draft.patch({ completed }));
+  const completed = text(taskFields, '完成时间', 'completed', localDateTime(draft.value.completed),
+    value => draft.patch({ completed: completionInstant(value) }), 'datetime-local');
+  completed.step = '0.001';
+  append(taskFields, 'small', '按本机时区选择日期和时间；标记已完成时自动填写，可修改。');
   text(form, '标签（逗号分隔）', 'tags', draft.value.tags.join(', '), v => draft.patch({ tags: v.split(/[,，]/).map(t => t.trim()).filter(Boolean) }));
   const tree = new Tree(board.nodes), forbidden = new Set([draft.value.id, ...tree.descendants(draft.value.id).map(n => n.id)]);
   const searchLabel = append(form, 'label', '查找父节点'), search = append(searchLabel, 'input'); search.type = 'search'; search.placeholder = '搜索名称'; search.setAttribute('aria-label', '查找父节点');
@@ -115,7 +131,7 @@ export function inspector(parent: HTMLElement, draft: NodeDraft, board: Board, p
     error.textContent = draft.error; retry.hidden = copy.hidden = reload.hidden = !draft.error;
     // Preserve focus/caret while normalizing auto-generated completion timestamps.
     for (const [key, input] of fields) if (document.activeElement !== input) {
-      const value = draft.value[key]; input.value = key === 'tags' ? draft.value.tags.join(', ') : key === 'estimate' || key === 'actual' ? String(Number(value) / 60) : String(value);
+      const value = draft.value[key]; input.value = key === 'completed' ? localDateTime(draft.value.completed) : key === 'tags' ? draft.value.tags.join(', ') : key === 'estimate' || key === 'actual' ? String(Number(value) / 60) : String(value);
     }
     if (lastKind !== draft.value.kind) { lastKind = draft.value.kind; populate(); }
     if (!draft.dirty && !draft.busy && !draft.error) preview();

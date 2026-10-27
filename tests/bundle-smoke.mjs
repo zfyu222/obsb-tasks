@@ -25,5 +25,11 @@ assert.ok(view.contentEl.querySelector('svg.obsb-map-paths path').getAttribute('
 const kind = view.contentEl.querySelector('[data-field=kind]'); kind.value = 'area'; kind.dispatchEvent(new dom.window.Event('change')); await tick();
 assert.equal((await plugin.store.load()).nodes[0].kind, 'area');
 press(stage(), 'z', { ctrlKey: true }); await tick(); assert.equal((await plugin.store.load()).nodes[0].kind, 'task');
+const status = view.contentEl.querySelector('[data-field=status]'); status.value = 'done'; status.dispatchEvent(new dom.window.Event('change')); await tick();
+const completed = view.contentEl.querySelector('[data-field=completed]');
+assert.equal(completed.type, 'datetime-local');
+assert.equal(new Date(completed.value).toISOString(), (await plugin.store.load()).nodes[0].completed);
+completed.value = '2026-10-27T18:30'; completed.dispatchEvent(new dom.window.Event('input')); completed.dispatchEvent(new dom.window.Event('change')); await tick();
+assert.equal((await plugin.store.load()).nodes[0].completed, new Date('2026-10-27T18:30').toISOString());
 await view.onClose();
-console.log('Production bundle: licensed fork layout, Tab/Enter, direct properties and Ctrl+Z passed');
+console.log('Production bundle: licensed fork layout, Tab/Enter, direct properties, completion picker and Ctrl+Z passed');
