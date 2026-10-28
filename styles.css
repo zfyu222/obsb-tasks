@@ -50,7 +50,7 @@
 .obsb-map-world { position:absolute; left:0; top:0; width:0; height:0; transform-origin:0 0; pointer-events:none; }
 .obsb-map-paths { position:absolute; inset:0; width:100%; height:100%; overflow:hidden; pointer-events:none; }
 .obsb-core-node { box-sizing:border-box; min-height:0; padding:2px 5px; pointer-events:auto; user-select:none; font-size:13px; line-height:18px; border:1px solid transparent; border-bottom-color:var(--branch-color); border-radius:3px; background:var(--background-primary); }
-.obsb-core-node.area { background:var(--background-primary); border-width:1px; border-color:transparent; border-bottom-color:var(--branch-color); font-weight:600; }
+.obsb-core-node.area { background:var(--background-primary); border-width:1px; border-color:transparent; border-bottom-color:var(--branch-color); color:var(--text-muted); font-weight:400; }
 .obsb-core-node.root { background:var(--interactive-accent); color:var(--text-on-accent); border:1px solid transparent; border-radius:5px; }
 .obsb-core-node.task[data-importance=high] { --task-priority-color:#c93636; }
 .obsb-core-node.task[data-importance=medium] { --task-priority-color:#9a6700; }

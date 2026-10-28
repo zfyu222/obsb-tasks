@@ -15,7 +15,7 @@ export function bounds(nodes: LayoutNode[]): Box {
 }
 export function titleSize(title: string, task = false, measure?: (text: string) => number): { width: number; height: number } {
   const textWidth = measure ? measure(title) : [...title].reduce((w, c) => w + (/[^\x00-\xff]/.test(c) ? 13 : 7), 0);
-  return { width: Math.min(420, Math.max(44, textWidth * (task ? 1 : 1.08) + (task ? 32 : 34))), height: 24 };
+  return { width: Math.min(420, Math.max(44, textWidth + (task ? 32 : 14))), height: 24 };
 }
 export function layoutGraph(tree: Tree, include: Set<string>, collapsed: Set<string>, focus?: string,
   direction: 'mindmap' | 'right' = 'mindmap', measure?: (text: string) => number): GraphGeometry {

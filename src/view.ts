@@ -114,7 +114,7 @@ export class TaskView extends ItemView {
         card.classList.toggle('area', node.kind === 'area'); card.classList.toggle('task', node.kind === 'task'); card.classList.toggle('done', node.status === 'done');
         const title = card.querySelector('button');
         // Keep an active inline editor and pointer target mounted during asynchronous saves.
-        if (!card.querySelector('.obsb-task-inline-title') && title) title.textContent = `${node.kind === 'area' ? '▣ ' : node.status === 'done' ? '✓ ' : '○ '}${node.title}`;
+        if (!card.querySelector('.obsb-task-inline-title') && title) title.textContent = `${node.kind === 'area' ? '' : node.status === 'done' ? '✓ ' : '○ '}${node.title}`;
         card.querySelector('small')?.remove();
         this.mapAppearance(card, node);
       }
@@ -416,7 +416,7 @@ export class TaskView extends ItemView {
         if (n && !matches.has(n.id)) card.classList.add('context');
         if (n && this.inlineId === n.id) this.titleInput(card, n);
         else {
-          const title = el(card, 'button', n ? (n.kind === 'area' ? '▣ ' : n.status === 'done' ? '✓ ' : '○ ') + n.title : 'root');
+          const title = el(card, 'button', n ? (n.kind === 'area' ? '' : n.status === 'done' ? '✓ ' : '○ ') + n.title : 'root');
           title.type = 'button'; title.dataset.mapTitle = 'true';
           title.addEventListener('click', event => {
             const id = n?.id;

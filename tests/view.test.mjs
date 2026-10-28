@@ -97,7 +97,7 @@ test('root supports Enter; area Enter creates an area sibling without copying ta
   key(view.contentEl.querySelector('.obsb-task-stage'), 'Enter'); await tick();
   assert.equal((await plugin.store.load()).nodes.at(-1).parent, null);
   key(view.contentEl.querySelector('.obsb-task-inline-title'), 'Enter'); await tick();
-  find(view.contentEl, '▣ AAA领域').click(); await tick();
+  find(view.contentEl, 'AAA领域').click(); await tick();
   key(view.contentEl.querySelector('.obsb-task-stage'), 'Enter'); await tick();
   const nodes = (await plugin.store.load()).nodes.filter(n => n.parent === null), index = nodes.findIndex(n => n.id === area.id);
   assert.equal(nodes[index + 1].kind, 'area'); assert.equal(nodes[index + 1].parent, null);
@@ -168,6 +168,7 @@ test('compact title-only map keeps priority, status and tooltip synchronized thr
     assert.ok(card().title.startsWith('长任务名称'.repeat(30))); assert.equal(card().style.width, '420px');
     inputValue(field(view, 'kind'), 'area'); await tick();
     assert.equal(card().dataset.importance, undefined); assert.match(card().title, /领域/);
+    assert.equal(card().querySelector('[data-map-title]').textContent, '长任务名称'.repeat(30));
     inputValue(field(view, 'kind'), 'task'); await tick();
     assert.equal(card().dataset.importance, 'high'); assert.equal(card().querySelector('small'), null);
     inputValue(field(view, 'status'), 'cancelled'); await tick();
@@ -209,7 +210,7 @@ test('selection flushes unblurred text, while external edits block save without 
   const { view, plugin, data } = await setup();
   find(view.contentEl, '○ 任务1').click(); await tick();
   inputValue(field(view, 'title'), '切换前保存', false);
-  find(view.contentEl, '▣ AAA领域').click(); await tick();
+  find(view.contentEl, 'AAA领域').click(); await tick();
   assert.ok((await plugin.store.load()).nodes.some(n => n.title === '切换前保存'));
   inputValue(field(view, 'title'), '旧表单草稿', false);
   data.set(CURRENT, data.get(CURRENT).replace('领域：AAA领域', '领域：外部修改领域'));
@@ -287,7 +288,7 @@ test('unified undo/redo covers inline titles, creation and properties without re
 });
 test('Ctrl-click multi-select deletes whole selected subtrees in one undoable operation', async () => {
   const { view, plugin, area } = await setup();
-  find(view.contentEl, '▣ AAA领域').click(); await tick();
+  find(view.contentEl, 'AAA领域').click(); await tick();
   const taskButton = find(view.contentEl, '○ 任务1'); taskButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, ctrlKey: true })); await tick();
   assert.equal(view.selectedIds.size, 2);
   key(view.contentEl.querySelector('.obsb-task-stage'), 'Delete'); await tick();
