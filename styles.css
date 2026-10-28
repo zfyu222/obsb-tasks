@@ -64,8 +64,13 @@
 .obsb-core-node > button[data-map-title] { display:block; width:100%; min-height:0; height:18px; font:inherit; line-height:18px; color:inherit; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; padding:0; margin:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
 .obsb-core-node.is-selected { border-color:var(--interactive-accent); box-shadow:0 0 0 1px var(--interactive-accent); }
 .obsb-core-node .obsb-task-inline-title { height:18px; min-height:0; padding:0; line-height:18px; color:var(--text-normal,inherit); background:var(--background-primary); }
-.obsb-core-node > button.obsb-map-fold { position:absolute; right:-17px; top:50%; transform:translateY(-50%); min-height:14px; height:14px; min-width:14px; width:14px; padding:0; font-size:10px; line-height:12px; border-radius:3px; border-color:var(--branch-color); }
-.obsb-core-node[data-direction=left] > button.obsb-map-fold { left:-17px; right:auto; }
+/* Enhancing Mindmap mm-node-bar convention: filled while open, hollow while folded. */
+.obsb-core-node > button.obsb-map-fold { position:absolute; right:-14px; top:var(--fold-y,50%); transform:translateY(-50%); box-sizing:border-box; min-height:12px; height:12px; min-width:12px; width:12px; padding:0; border:2px solid var(--branch-color); border-radius:50%; background:var(--branch-color); box-shadow:none; cursor:pointer; }
+.obsb-core-node > button.obsb-map-fold[aria-expanded=false] { background:var(--background-primary); }
+.obsb-core-node > button.obsb-map-fold::before { content:''; position:absolute; inset:-5px; border-radius:50%; }
+.obsb-core-node > button.obsb-map-fold:hover { transform:translateY(-50%) scale(1.2); }
+.obsb-core-node > button.obsb-map-fold:focus-visible { outline:2px solid var(--interactive-accent); outline-offset:2px; }
+.obsb-core-node[data-direction=left] > button.obsb-map-fold { left:-14px; right:auto; }
 .obsb-core-node.drop-child { box-shadow:0 0 0 4px var(--interactive-accent); }
 .obsb-core-node.drop-before::before,.obsb-core-node.drop-after::after { content:''; position:absolute; left:0; right:0; height:3px; background:var(--interactive-accent); }
 .obsb-core-node.drop-before::before { top:-5px; }.obsb-core-node.drop-after::after { bottom:-5px; }

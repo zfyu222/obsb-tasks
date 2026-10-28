@@ -58,7 +58,7 @@ export function layoutGraph(tree: Tree, include: Set<string>, collapsed: Set<str
     nodes.set(id, node); order.push(node); return node;
   };
   const root = make(focus ? tree.byId.get(focus) : undefined);
-  const pending = [...(tree.children.get(focus ?? null) ?? [])].reverse().map(task => ({ task, parent: root }));
+  const pending = [...(root.isExpand ? tree.children.get(focus ?? null) ?? [] : [])].reverse().map(task => ({ task, parent: root }));
   while (pending.length) {
     const { task, parent } = pending.pop()!; if (!include.has(task.id)) continue;
     const node = make(task, parent); parent.children.push(node);

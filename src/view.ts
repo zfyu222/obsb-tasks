@@ -134,7 +134,7 @@ export class TaskView extends ItemView {
     }
     if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
     const target = event.target as HTMLElement;
-    if (target.closest('input,textarea,select,[contenteditable="true"]') || target.closest('button') && !target.closest('[data-node-id]')) return;
+    if (target.closest('input,textarea,select,.obsb-map-fold,[contenteditable="true"]') || target.closest('button') && !target.closest('[data-node-id]')) return;
     if (!['Tab', 'Insert', 'Enter', 'F2', ' ', 'Home', 'Delete', 'Backspace', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
     event.preventDefault(); event.stopPropagation(); if (event.repeat) return;
     void this.run(async () => {
@@ -429,11 +429,12 @@ export class TaskView extends ItemView {
         if (n) this.mapAppearance(card, n);
         const id = n?.id, count = this.tree.children.get(id ?? null)?.length ?? 0;
         if (id && count) {
-          const fold = button(card, this.collapsed.has(id) ? '+' : '−', () => this.run(async () => {
+          const fold = button(card, '', () => this.run(async () => {
             await this.flush(); if (this.collapsed.has(id)) this.collapsed.delete(id); else this.collapsed.add(id); this.draw();
           }));
           fold.className = 'obsb-map-fold'; fold.title = (this.collapsed.has(id) ? '展开 ' : '收起 ') + count + ' 个子节点';
           fold.setAttribute('aria-label', fold.title);
+          fold.setAttribute('aria-expanded', String(!this.collapsed.has(id)));
         }
       }
     }, this.source !== 'current');

@@ -115,7 +115,7 @@ export class GraphViewport {
   private doubleClick: EventListener = event => {
     if (this.readonly) return;
     const e = event as MouseEvent, target = e.target as HTMLElement;
-    if (target.closest('input,textarea,[contenteditable="true"]')) return;
+    if (target.closest('input,textarea,button:not([data-map-title]),[contenteditable="true"]')) return;
     const card = target.closest<HTMLElement>('[data-node-id]') ?? this.element.ownerDocument.elementFromPoint?.(e.clientX, e.clientY)?.closest<HTMLElement>('[data-node-id]');
     if (!card?.dataset.nodeId || !this.element.contains(card)) return;
     e.preventDefault(); e.stopImmediatePropagation(); this.hooks.edit(card.dataset.nodeId);

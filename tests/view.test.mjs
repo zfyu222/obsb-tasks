@@ -176,6 +176,34 @@ test('compact title-only map keeps priority, status and tooltip synchronized thr
   } finally { await view.onClose(); view.contentEl.remove(); }
 });
 
+test('branch dots toggle descendants without changing selection or persisted task content', async () => {
+  const { view, plugin, area } = await setup();
+  try {
+    const before = await plugin.store.load();
+    const dot = () => view.contentEl.querySelector(`.obsb-core-node[data-node-id="${area.id}"] .obsb-map-fold`);
+    assert.equal(dot().textContent, ''); assert.equal(dot().getAttribute('aria-expanded'), 'true');
+    assert.equal(dot().getAttribute('aria-label'), '收起 1 个子节点');
+    assert.match(dot().parentElement.style.getPropertyValue('--branch-color'), /^#/);
+    assert.equal(dot().parentElement.style.getPropertyValue('--fold-y'), 'calc(50% + 1px)');
+    assert.equal(key(dot(), 'Enter').defaultPrevented, false, 'dot keeps native button activation instead of creating a task');
+    assert.equal(key(dot(), ' ').defaultPrevented, false);
+    await tick(); assert.equal(view.board.nodes.length, before.nodes.length);
+    assert.equal(view.contentEl.querySelector('.obsb-core-node.task .obsb-map-fold'), null, 'leaf tasks have no dot');
+    dot().click(); await tick();
+    assert.equal(dot().getAttribute('aria-expanded'), 'false');
+    assert.equal(dot().getAttribute('aria-label'), '展开 1 个子节点');
+    assert.equal(find(view.contentEl, '✓ 任务2'), undefined);
+    dot().dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true })); await tick();
+    assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null, 'double clicking a dot never renames its node');
+    dot().click(); await tick();
+    assert.ok(find(view.contentEl, '✓ 任务2')); assert.equal(dot().getAttribute('aria-expanded'), 'true');
+    find(view.contentEl, 'AAA领域').click(); await tick(); find(view.contentEl, '聚焦').click(); await tick();
+    dot().click(); await tick(); assert.equal(find(view.contentEl, '✓ 任务2'), undefined, 'focused root also folds');
+    dot().click(); await tick(); assert.ok(find(view.contentEl, '✓ 任务2'));
+    assert.deepEqual(await plugin.store.load(), before);
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
+
 test('input shortcuts, IME selection, modifiers and key repeats do not create accidental nodes', async () => {
   const { view, plugin } = await setup();
   find(view.contentEl, '○ 任务1').click(); await tick();

@@ -12,6 +12,7 @@ Copyright (c) 2021 Mark. MIT license. The complete original license is retained 
 | `src/mindmap/selection.ts` | Top-level selection roots, ancestor membership, selection rectangle and intersection tests. One parameter made optional for strict TypeScript checking. |
 | `src/mindmap/History.ts` | Unified bounded command stacks, wrapped by asynchronous task persistence and per-node deltas. Runtime Obsidian imports removed. |
 | `src/mindmap/mindmap.ts` mouse handlers | `appMouseDown/Move/Up`, `appContextMenu` and `appMousewheel` adapted into `graph-viewport.ts`: right-button panning, left marquee, drag suppression and local zoom routing. Modernized with Pointer Events, transform-based coordinates, touch/pinch, cleanup and task-specific drag/drop. |
+| `styles.css` `.mm-node-bar` | Round 12px branch toggle, hover enlargement and hollow collapsed state adapted to the task canvas with semantic buttons, expanded-state accessibility and line-aligned positions. |
 
 The rest of the fork (its plugin entry, Markdown parser, summaries, grafts, relation editor, attachment import and settings) is not bundled. The original fork is not modified and need not be installed. Task Markdown, attributes and archive transactions remain owned by the OBSB Tasks adapter.
 

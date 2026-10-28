@@ -47,5 +47,10 @@ assert.ok(plugin.commands.has('migrate-markdown')); plugin.commands.get('migrate
 assert.match(file.data, /"format":2/); assert.match(file.data, /- \[x\] 实际发布包节点/);
 assert.match(file.data, /> AI 可直接阅读 \[\[设计\]\]/); assert.doesNotMatch(file.data, /obsb-node|"parent"/);
 assert.ok(plugin.app.vault.getMarkdownFiles().some(f => f.path.startsWith('Raw/任务管理/格式备份/') && f.data === legacy));
+press(stage(), 'Tab'); await tick();
+let dot = view.contentEl.querySelector('.obsb-map-fold'); assert.ok(dot); assert.equal(dot.textContent, '');
+assert.equal(dot.getAttribute('aria-expanded'), 'true'); dot.click(); await tick();
+dot = view.contentEl.querySelector('.obsb-map-fold'); assert.equal(dot.getAttribute('aria-expanded'), 'false');
+dot.click(); await tick(); assert.equal(view.contentEl.querySelector('.obsb-map-fold').getAttribute('aria-expanded'), 'true');
 await view.onClose();
-console.log('Production bundle: compact nodes, live priority, layout, editing, completion and safe Markdown migration passed');
+console.log('Production bundle: round branch toggles, compact nodes, live priority, editing and safe Markdown migration passed');

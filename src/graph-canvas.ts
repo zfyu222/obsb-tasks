@@ -88,7 +88,9 @@ export class GraphCanvas {
       visible.add(n.id);
       let card = this.mounted.get(n.id);
       if (!card) { card = document.createElement('div'); this.mounted.set(n.id, card); this.layer.append(card); this.actions.render(card, n); }
-      Object.assign(card.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${b.width}px`, height: `${b.height}px`, '--branch-color': n.stroke || '#6585cc' });
+      Object.assign(card.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${b.width}px`, height: `${b.height}px` });
+      card.style.setProperty('--branch-color', n.stroke || '#6585cc');
+      card.style.setProperty('--fold-y', n.level <= 1 ? 'calc(50% + 1px)' : 'calc(100% + 2px)');
       card.classList.toggle('is-selected', this.actions.selected().has(n.id) || !this.actions.selected().size && n === this.geometry.root);
     }
     for (const [id, card] of this.mounted) if (!visible.has(id) && (!this.geometry.nodes.has(id) || !card.contains(document.activeElement))) { card.remove(); this.mounted.delete(id); }
