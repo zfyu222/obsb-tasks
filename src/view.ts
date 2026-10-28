@@ -115,12 +115,17 @@ export class TaskView extends ItemView {
         const title = card.querySelector('button');
         // Keep an active inline editor and pointer target mounted during asynchronous saves.
         if (!card.querySelector('.obsb-task-inline-title') && title) title.textContent = `${node.kind === 'area' ? '▣ ' : node.status === 'done' ? '✓ ' : '○ '}${node.title}`;
-        const info = card.querySelector('small');
-        if (node.kind === 'task') (info ?? el(card, 'small')).textContent = `${STATUS[node.status]} · ${IMPORTANCE[node.importance]}${node.deadline ? ` · ${node.deadline}` : ''}${node.notes ? ' · 📝' : ''}`;
-        else info?.remove();
+        card.querySelector('small')?.remove();
+        this.mapAppearance(card, node);
       }
     }
     this.statusEl.textContent = `当前：${this.nodes.filter(n => n.kind === 'task').length} 个任务 · 归档和休眠不参与当前流程`;
+  }
+  private mapAppearance(card: HTMLElement, node: TaskNode): void {
+    if (node.kind === 'task') card.dataset.importance = node.importance;
+    else delete card.dataset.importance;
+    card.dataset.status = node.status;
+    card.title = node.title + (node.kind === 'task' ? `\n${STATUS[node.status]} · 重要程度：${IMPORTANCE[node.importance]}${node.deadline ? ` · 截止：${node.deadline}` : ''}` : '\n领域') + (node.notes ? '\n有注释，选中后在右侧查看' : '');
   }
   private diagramKey(event: KeyboardEvent): void {
     if (this.source !== 'current' || this.mode !== 'map' || event.isComposing || event.keyCode === 229) return;
@@ -346,7 +351,7 @@ export class TaskView extends ItemView {
     }
     if (!this.measure && typeof CanvasRenderingContext2D !== 'undefined') {
       const context = this.stage.ownerDocument.createElement('canvas').getContext('2d');
-      if (context) { context.font = '14px ' + (getComputedStyle(this.stage).fontFamily || 'sans-serif'); this.measure = text => context.measureText(text).width; }
+      if (context) { context.font = '13px ' + (getComputedStyle(this.stage).fontFamily || 'sans-serif'); this.measure = text => context.measureText(text).width; }
     }
     const filtered = !!this.query || !!this.status || this.source === 'period';
     return layoutGraph(this.tree, include, filtered ? new Set() : this.collapsed, this.focusId, this.direction, this.measure);
@@ -421,7 +426,7 @@ export class TaskView extends ItemView {
           });
           if (n) title.addEventListener('dblclick', () => { void this.run(async () => { if (this.selected !== n.id) await this.select(n.id); await this.beginTitle(); }).catch(report); });
         }
-        if (n?.kind === 'task') el(card, 'small', STATUS[n.status] + ' · ' + IMPORTANCE[n.importance] + (n.deadline ? ' · ' + n.deadline : '') + (n.notes ? ' · 📝' : ''));
+        if (n) this.mapAppearance(card, n);
         const id = n?.id, count = this.tree.children.get(id ?? null)?.length ?? 0;
         if (id && count) {
           const fold = button(card, this.collapsed.has(id) ? '+' : '−', () => this.run(async () => {

@@ -22,6 +22,10 @@ assert.equal((await plugin.store.load()).nodes.length, 1);
 let input = view.contentEl.querySelector('.obsb-task-inline-title'); assert.ok(input);
 input.value = '实际发布包节点'; input.dispatchEvent(new dom.window.Event('input')); press(input, 'Enter'); await tick();
 assert.equal((await plugin.store.load()).nodes[0].title, '实际发布包节点');
+const card = view.contentEl.querySelector('.obsb-core-node.task');
+assert.equal(card.style.height, '24px'); assert.equal(card.querySelector('small'), null); assert.equal(card.dataset.importance, 'medium');
+const importance = view.contentEl.querySelector('[data-field=importance]'); importance.value = 'high'; importance.dispatchEvent(new dom.window.Event('change')); await tick();
+assert.equal(card.dataset.importance, 'high'); assert.match(card.title, /重要程度：高/);
 assert.ok(view.contentEl.querySelector('svg.obsb-map-paths path').getAttribute('d').includes('C'));
 const kind = view.contentEl.querySelector('[data-field=kind]'); kind.value = 'area'; kind.dispatchEvent(new dom.window.Event('change')); await tick();
 assert.equal((await plugin.store.load()).nodes[0].kind, 'area');
@@ -44,4 +48,4 @@ assert.match(file.data, /"format":2/); assert.match(file.data, /- \[x\] 实际�
 assert.match(file.data, /> AI 可直接阅读 \[\[设计\]\]/); assert.doesNotMatch(file.data, /obsb-node|"parent"/);
 assert.ok(plugin.app.vault.getMarkdownFiles().some(f => f.path.startsWith('Raw/任务管理/格式备份/') && f.data === legacy));
 await view.onClose();
-console.log('Production bundle: layout, editing, completion, Markdown migration command, draft flush and exact backup passed');
+console.log('Production bundle: compact nodes, live priority, layout, editing, completion and safe Markdown migration passed');

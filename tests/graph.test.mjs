@@ -46,6 +46,16 @@ test('wide fork layout packs complete branches without overlaps', () => {
     assert.ok(a.x + a.width <= b.x || b.x + b.width <= a.x, `overlap ${leaves[i].task.title} / ${leaves[j].task.title}`);
   }
 });
+
+test('compact map uses title-sized single-line nodes and 28px sibling pitch', () => {
+  const short = titleSize('下一步', true), long = titleSize('很长的任务名称'.repeat(30), true);
+  assert.equal(short.height, 24); assert.ok(short.width < 80);
+  assert.equal(long.height, 24); assert.equal(long.width, 420);
+  const area = node('项目', 'area'), tasks = Array.from({ length: 100 }, (_, i) => node(`任务${i}`, 'task', area.id));
+  const nodes = [area, ...tasks], g = layoutGraph(new Tree(nodes), new Set(nodes.map(n => n.id)), new Set(), undefined, 'right');
+  assert.ok(g.bounds.height <= 2800);
+  for (let i = 1; i < tasks.length; i++) assert.equal(g.nodes.get(tasks[i].id).box.y - g.nodes.get(tasks[i - 1].id).box.y, 28);
+});
 test('right pan continues outside viewport and context suppression/cleanup work', () => {
   const { element, camera, calls, v } = viewport();
   pointer(element, 'pointerdown', 50, 50, { button: 2 }); pointer(document, 'pointermove', 170, 90, { button: 2 }); pointer(document, 'pointerup', 170, 90, { button: 2 });

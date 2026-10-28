@@ -151,6 +151,30 @@ test('completion picker uses local time, preserves the stored instant and auto-f
   }
 });
 
+test('compact title-only map keeps priority, status and tooltip synchronized through edits and kind changes', async () => {
+  const { view } = await setup();
+  try {
+    find(view.contentEl, '○ 任务1').click(); await tick();
+    const id = view.board.nodes.find(n => n.title === '任务1').id;
+    const card = () => view.contentEl.querySelector(`.obsb-core-node[data-node-id="${id}"]`);
+    assert.equal(card().style.height, '24px'); assert.equal(card().querySelector('small'), null);
+    assert.equal(card().dataset.importance, 'medium');
+    inputValue(field(view, 'importance'), 'high'); await tick();
+    assert.equal(card().dataset.importance, 'high'); assert.match(card().title, /重要程度：高/);
+    inputValue(field(view, 'status'), 'done'); await tick();
+    assert.ok(card().classList.contains('done')); assert.equal(card().dataset.status, 'done');
+    assert.equal(card().querySelector('[data-map-title]').textContent, '✓ 任务1');
+    inputValue(field(view, 'title'), '长任务名称'.repeat(30)); await tick();
+    assert.ok(card().title.startsWith('长任务名称'.repeat(30))); assert.equal(card().style.width, '420px');
+    inputValue(field(view, 'kind'), 'area'); await tick();
+    assert.equal(card().dataset.importance, undefined); assert.match(card().title, /领域/);
+    inputValue(field(view, 'kind'), 'task'); await tick();
+    assert.equal(card().dataset.importance, 'high'); assert.equal(card().querySelector('small'), null);
+    inputValue(field(view, 'status'), 'cancelled'); await tick();
+    assert.equal(card().dataset.status, 'cancelled'); assert.equal(card().style.height, '24px');
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
+
 test('input shortcuts, IME selection, modifiers and key repeats do not create accidental nodes', async () => {
   const { view, plugin } = await setup();
   find(view.contentEl, '○ 任务1').click(); await tick();

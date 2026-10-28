@@ -49,13 +49,23 @@
 .obsb-map-viewport.is-panning,.obsb-map-viewport.is-panning * { cursor:grabbing !important; user-select:none; }
 .obsb-map-world { position:absolute; left:0; top:0; width:0; height:0; transform-origin:0 0; pointer-events:none; }
 .obsb-map-paths { position:absolute; inset:0; width:100%; height:100%; overflow:hidden; pointer-events:none; }
-.obsb-core-node { box-sizing:border-box; min-height:0; padding:8px 10px; pointer-events:auto; user-select:none; border-color:var(--branch-color); border-radius:7px; background:var(--background-primary); }
-.obsb-core-node.area { background:var(--background-secondary); border-width:1.5px; }
-.obsb-core-node.root { background:var(--interactive-accent); color:var(--text-on-accent); border:0; border-radius:12px; }
-.obsb-core-node > button[data-map-title] { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; white-space:normal; line-height:21px; overflow:hidden; overflow-wrap:anywhere; height:auto; padding:0; margin:0; }
-.obsb-core-node small { line-height:16px; font-size:11px; }
-.obsb-core-node > button.obsb-map-fold { position:absolute; right:-20px; top:50%; transform:translateY(-50%); min-height:18px; height:18px; min-width:18px; width:18px; padding:0; border-radius:50%; border-color:var(--branch-color); }
-.obsb-core-node[data-direction=left] > button.obsb-map-fold { left:-20px; right:auto; }
+.obsb-core-node { box-sizing:border-box; min-height:0; padding:2px 5px; pointer-events:auto; user-select:none; font-size:13px; line-height:18px; border:1px solid transparent; border-bottom-color:var(--branch-color); border-radius:3px; background:var(--background-primary); }
+.obsb-core-node.area { background:var(--background-primary); border-width:1px; border-color:transparent; border-bottom-color:var(--branch-color); font-weight:600; }
+.obsb-core-node.root { background:var(--interactive-accent); color:var(--text-on-accent); border:1px solid transparent; border-radius:5px; }
+.obsb-core-node.task[data-importance=high] { --task-priority-color:#c93636; }
+.obsb-core-node.task[data-importance=medium] { --task-priority-color:#9a6700; }
+.obsb-core-node.task[data-importance=low] { --task-priority-color:#3271b5; }
+.theme-dark .obsb-core-node.task[data-importance=high] { --task-priority-color:#ff8787; }
+.theme-dark .obsb-core-node.task[data-importance=medium] { --task-priority-color:#e9bc64; }
+.theme-dark .obsb-core-node.task[data-importance=low] { --task-priority-color:#83b8ef; }
+.obsb-core-node.task { color:var(--task-priority-color); border-bottom-color:var(--task-priority-color); }
+.obsb-core-node.task.done,.obsb-core-node.task[data-status=cancelled] { color:var(--text-muted); border-bottom-color:var(--text-faint); opacity:1; }
+.obsb-core-node.task.done > button[data-map-title],.obsb-core-node.task[data-status=cancelled] > button[data-map-title] { text-decoration:line-through; }
+.obsb-core-node > button[data-map-title] { display:block; width:100%; min-height:0; height:18px; font:inherit; line-height:18px; color:inherit; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; padding:0; margin:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
+.obsb-core-node.is-selected { border-color:var(--interactive-accent); box-shadow:0 0 0 1px var(--interactive-accent); }
+.obsb-core-node .obsb-task-inline-title { height:18px; min-height:0; padding:0; line-height:18px; color:var(--text-normal,inherit); background:var(--background-primary); }
+.obsb-core-node > button.obsb-map-fold { position:absolute; right:-17px; top:50%; transform:translateY(-50%); min-height:14px; height:14px; min-width:14px; width:14px; padding:0; font-size:10px; line-height:12px; border-radius:3px; border-color:var(--branch-color); }
+.obsb-core-node[data-direction=left] > button.obsb-map-fold { left:-17px; right:auto; }
 .obsb-core-node.drop-child { box-shadow:0 0 0 4px var(--interactive-accent); }
 .obsb-core-node.drop-before::before,.obsb-core-node.drop-after::after { content:''; position:absolute; left:0; right:0; height:3px; background:var(--interactive-accent); }
 .obsb-core-node.drop-before::before { top:-5px; }.obsb-core-node.drop-after::after { bottom:-5px; }

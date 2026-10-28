@@ -8,7 +8,7 @@ Copyright (c) 2021 Mark. MIT license. The complete original license is retained 
 
 | Source | Use and adaptation |
 | --- | --- |
-| `src/mindmap/Layout.ts` | Actual two-sided/right-side balanced layout and cubic edge generation. Imports replaced by a narrow host interface and a deterministic fallback color. Recursive direction/position/move/edge walks converted to iterative walks; no-op leaf/single-sibling adjustments skipped to handle large/deep task trees. Summary/graft-specific calls remain dormant through the host boundary. |
+| `src/mindmap/Layout.ts` | Actual two-sided/right-side balanced layout and cubic edge generation. Imports replaced by a narrow host interface and a deterministic fallback color. Recursive direction/position/move/edge walks converted to iterative walks; no-op leaf/single-sibling adjustments skipped to handle large/deep task trees. Optional task spacing is applied before the first layout pass. Summary/graft-specific calls remain dormant through the host boundary. |
 | `src/mindmap/selection.ts` | Top-level selection roots, ancestor membership, selection rectangle and intersection tests. One parameter made optional for strict TypeScript checking. |
 | `src/mindmap/History.ts` | Unified bounded command stacks, wrapped by asynchronous task persistence and per-node deltas. Runtime Obsidian imports removed. |
 | `src/mindmap/mindmap.ts` mouse handlers | `appMouseDown/Move/Up`, `appContextMenu` and `appMousewheel` adapted into `graph-viewport.ts`: right-button panning, left marquee, drag suppression and local zoom routing. Modernized with Pointer Events, transform-based coordinates, touch/pinch, cleanup and task-specific drag/drop. |

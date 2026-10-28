@@ -20,11 +20,13 @@ export default class Layout {
     rights:Node[]=[];
     colors:string[]=[];
     lineWidth=2;
-    constructor(node:Node,direct?:string,colors?:string[]){
+    constructor(node:Node,direct?:string,colors?:string[],spacing?:{levelDis:number,nodeDis:number,firstLevelDis:number,firstNodeDis:number}){
        this.root = node||null;
        this.mind = node?.mindmap||null;
        this.direct = direct||'mindmap';
        this.colors=colors||[];
+       // Task adapter supplies compact spacing before the first layout pass.
+       if (spacing) Object.assign(this, spacing);
 
        if (!this.svgDom) this.svgDom = this.mind.edgeGroup.group();
 
