@@ -53,6 +53,11 @@ export class GraphCanvas {
   setGeometry(geometry: GraphGeometry): void {
     this.geometry = geometry; this.sorted = [...geometry.order].sort((a, b) => a.box.y - b.box.y); this.paint();
   }
+  refreshNode(id: string): void {
+    const card = this.mounted.get(id), node = this.geometry.nodes.get(id);
+    if (!card || !node) return;
+    card.replaceChildren(); this.actions.render(card, node); this.paint();
+  }
   center(): void {
     const b = this.geometry.root.box;
     this.camera.x = (this.viewport.clientWidth || 800) / 2 - (b.x + b.width / 2) * this.camera.scale;

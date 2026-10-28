@@ -64,14 +64,23 @@ export class TaskView extends ItemView {
     this.actions = next.catch(() => {}); return next;
   }
   private async flush(): Promise<void> { await this.draft?.flush(); }
+  private async finishTitle(id = this.inlineId): Promise<void> {
+    if (id && this.inlineId !== id) return;
+    await this.flush();
+    if (!id || this.inlineId !== id) return;
+    this.inlineId = null;
+    // Only replace this node's editor. Rebuilding the viewport on blur would
+    // cancel the pointer gesture that is selecting the next node or blank area.
+    this.graph?.refreshNode(id);
+  }
   async prepareMigration(): Promise<void> { await this.run(async () => { await this.flush(); }); }
   private async select(id: string | null): Promise<void> {
-    await this.flush(); this.inlineId = null; this.selected = id;
+    await this.finishTitle(); this.selected = id;
     this.selectedIds = new Set(id ? [id] : []);
     await this.detail(); this.markSelected(); this.stage.focus({ preventScroll: true });
   }
   private async selectMany(ids: string[], primary?: string): Promise<void> {
-    await this.flush(); this.inlineId = null; this.selectedIds = new Set(ids.filter(id => this.tree.byId.has(id)));
+    await this.finishTitle(); this.selectedIds = new Set(ids.filter(id => this.tree.byId.has(id)));
     this.selected = primary && this.selectedIds.has(primary) ? primary : [...this.selectedIds][this.selectedIds.size - 1] ?? null;
     await this.detail(); this.markSelected(); this.stage.focus({ preventScroll: true });
   }
@@ -171,19 +180,22 @@ export class TaskView extends ItemView {
   }
   private titleInput(card: HTMLElement, node: TaskNode): void {
     const input = el(card, 'input'); input.className = 'obsb-task-inline-title'; input.setAttribute('aria-label', '节点名称');
-    input.value = this.draft?.value.title ?? node.title;
-    input.addEventListener('input', () => this.draft?.patch({ title: input.value }));
-    input.addEventListener('compositionstart', () => this.draft?.composition(true));
-    input.addEventListener('compositionend', () => this.draft?.composition(false));
-    input.addEventListener('change', () => { void this.flush().catch(report); });
+    const draft = this.draft;
+    input.value = draft?.value.title ?? node.title;
+    input.addEventListener('input', () => draft?.patch({ title: input.value }));
+    input.addEventListener('compositionstart', () => draft?.composition(true));
+    input.addEventListener('compositionend', () => draft?.composition(false));
+    input.addEventListener('change', () => { void draft?.flush().catch(report); });
+    input.addEventListener('blur', () => { void this.run(() => this.finishTitle(node.id)).catch(report); });
     input.addEventListener('keydown', event => {
       if (event.isComposing || event.keyCode === 229 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || !['Enter', 'Tab', 'Escape'].includes(event.key)) return;
       event.preventDefault(); event.stopPropagation(); if (event.repeat) return;
       void this.run(async () => {
-        if (event.key === 'Escape') this.draft?.patch({ title: this.inlineOriginal });
-        await this.flush(); this.inlineId = null;
+        if (this.inlineId !== node.id || this.draft !== draft) return;
+        if (event.key === 'Escape') draft?.patch({ title: this.inlineOriginal });
+        await this.finishTitle(node.id);
         if (event.key === 'Tab') await this.createRelative(true);
-        else { this.draw(); this.stage.focus({ preventScroll: true }); }
+        else this.stage.focus({ preventScroll: true });
       }).catch(report);
     });
   }

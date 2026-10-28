@@ -52,5 +52,13 @@ let dot = view.contentEl.querySelector('.obsb-map-fold'); assert.ok(dot); assert
 assert.equal(dot.getAttribute('aria-expanded'), 'true'); dot.click(); await tick();
 dot = view.contentEl.querySelector('.obsb-map-fold'); assert.equal(dot.getAttribute('aria-expanded'), 'false');
 dot.click(); await tick(); assert.equal(view.contentEl.querySelector('.obsb-map-fold').getAttribute('aria-expanded'), 'true');
+view.contentEl.querySelector('.obsb-core-node.root [data-map-title]').click(); await tick();
+assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null);
+const childTitle = [...view.contentEl.querySelectorAll('[data-map-title]')].find(e => e.textContent === '○ 新任务');
+childTitle.click(); await tick(); press(stage(), 'F2'); await tick();
+input = view.contentEl.querySelector('.obsb-task-inline-title'); input.value = '点击别处退出'; input.dispatchEvent(new dom.window.Event('input'));
+view.contentEl.querySelector('.obsb-core-node.root [data-map-title]').click(); await tick();
+assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null);
+assert.ok((await plugin.store.load()).nodes.some(n => n.title === '点击别处退出'));
 await view.onClose();
-console.log('Production bundle: round branch toggles, compact nodes, live priority, editing and safe Markdown migration passed');
+console.log('Production bundle: inline editor exit, round toggles, compact nodes, live priority and safe Markdown migration passed');

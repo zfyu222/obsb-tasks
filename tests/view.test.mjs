@@ -72,6 +72,92 @@ test('toolbar creates immediately without modal, inline name and sidebar Markdow
   assert.equal(saved.parent, null); assert.match(saved.notes, /\[\[需求#说明\]\]/);
   await view.onClose(); view.contentEl.remove();
 });
+
+test('clicking another node or blank canvas saves and replaces the inline editor without rebuilding the viewport', async () => {
+  const { view, plugin } = await setup();
+  try {
+    find(view.contentEl, '○ 任务1').click(); await tick();
+    key(view.contentEl.querySelector('.obsb-task-stage'), 'F2'); await tick();
+    const input = view.contentEl.querySelector('.obsb-task-inline-title');
+    const viewport = view.contentEl.querySelector('.obsb-map-viewport'), card = input.parentElement;
+    inputValue(input, '点击节点前保存', false);
+    find(view.contentEl, 'AAA领域').click(); await tick();
+    assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null);
+    assert.equal(view.contentEl.querySelector('.obsb-map-viewport'), viewport);
+    assert.ok(card.querySelector('[data-map-title]')); assert.equal(field(view, 'title').value, 'AAA领域');
+    // A late event from the detached input cannot patch the newly selected draft.
+    inputValue(input, '迟到的输入事件', false);
+    inputValue(field(view, 'notes'), '新的领域注释', false);
+    field(view, 'notes').dispatchEvent(new dom.window.Event('blur')); await tick();
+    assert.equal((await plugin.store.load()).nodes.find(n => n.kind === 'area').title, 'AAA领域');
+    find(view.contentEl, '○ 点击节点前保存').click(); await tick();
+    key(view.contentEl.querySelector('.obsb-task-stage'), 'F2'); await tick();
+    const activeViewport = view.contentEl.querySelector('.obsb-map-viewport');
+    inputValue(view.contentEl.querySelector('.obsb-task-inline-title'), '点击空白前保存', false);
+    for (const [target, type] of [[activeViewport, 'pointerdown'], [document, 'pointerup']]) {
+      const event = new dom.window.MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: 15, clientY: 15 });
+      Object.defineProperties(event, { pointerId: { value: 7 }, pointerType: { value: 'mouse' } }); target.dispatchEvent(event);
+    }
+    await tick();
+    assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null); assert.equal(view.selected, null);
+    assert.equal(view.contentEl.querySelector('.obsb-map-viewport'), activeViewport);
+    assert.ok((await plugin.store.load()).nodes.some(n => n.title === '点击空白前保存'));
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
+
+test('blur to sidebar ends title editing without stealing focus; Tab keeps the new child editor and Escape cancels it', async () => {
+  const { view, plugin } = await setup();
+  try {
+    find(view.contentEl, '○ 任务1').click(); await tick();
+    key(view.contentEl.querySelector('.obsb-task-stage'), 'F2'); await tick();
+    inputValue(view.contentEl.querySelector('.obsb-task-inline-title'), '侧栏失焦保存', false);
+    const notes = field(view, 'notes'); notes.focus(); await tick();
+    assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null); assert.equal(document.activeElement, notes);
+    key(view.contentEl.querySelector('.obsb-task-stage'), 'F2'); await tick();
+    const input = view.contentEl.querySelector('.obsb-task-inline-title'); inputValue(input, 'Tab 保存后建子任务', false);
+    key(input, 'Tab'); await tick(); await tick();
+    const child = view.contentEl.querySelector('.obsb-task-inline-title'); assert.ok(child); assert.notEqual(child, input);
+    assert.equal(document.activeElement, child);
+    inputValue(child, '取消本次修改', false); key(child, 'Escape'); await tick();
+    assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null);
+    const board = await plugin.store.load(); assert.ok(board.nodes.some(n => n.title === 'Tab 保存后建子任务'));
+    assert.ok(board.nodes.some(n => n.title === '新任务')); assert.ok(!board.nodes.some(n => n.title === '取消本次修改'));
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
+
+test('IME blur waits for composition end before saving and closing the inline editor', async () => {
+  const { view, plugin } = await setup();
+  try {
+    find(view.contentEl, '○ 任务1').click(); await tick();
+    key(view.contentEl.querySelector('.obsb-task-stage'), 'F2'); await tick();
+    const input = view.contentEl.querySelector('.obsb-task-inline-title');
+    input.dispatchEvent(new dom.window.Event('compositionstart')); inputValue(input, '中文候选', false);
+    field(view, 'notes').focus(); await tick();
+    assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), input);
+    assert.ok((await plugin.store.load()).nodes.some(n => n.title === '任务1'));
+    inputValue(input, '中文输入完成', false); input.dispatchEvent(new dom.window.Event('compositionend')); await tick();
+    assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null);
+    assert.ok((await plugin.store.load()).nodes.some(n => n.title === '中文输入完成'));
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
+
+test('failed inline save keeps the editor and old selection, then a successful retry exits and selects the target', async () => {
+  const { view, plugin } = await setup();
+  try {
+    find(view.contentEl, '○ 任务1').click(); await tick();
+    key(view.contentEl.querySelector('.obsb-task-stage'), 'F2'); await tick();
+    const input = view.contentEl.querySelector('.obsb-task-inline-title'), id = view.selected;
+    inputValue(input, '失败后保留草稿', false);
+    const change = plugin.store.change.bind(plugin.store); let fail = true;
+    plugin.store.change = (...args) => fail ? Promise.reject(new Error('模拟磁盘写入失败')) : change(...args);
+    find(view.contentEl, 'AAA领域').click(); await tick();
+    assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), input); assert.equal(view.selected, id);
+    assert.equal(input.value, '失败后保留草稿'); assert.match(view.contentEl.textContent, /模拟磁盘写入失败/);
+    fail = false; find(view.contentEl, 'AAA领域').click(); await tick();
+    assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null); assert.equal(field(view, 'title').value, 'AAA领域');
+    assert.equal((await plugin.store.load()).nodes.find(n => n.id === id).title, '失败后保留草稿');
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
 test('Tab creates child task and Enter creates adjacent sibling with defaults and inline focus', async () => {
   const { view, plugin } = await setup();
   find(view.contentEl, '○ 任务1').click(); await tick();
