@@ -112,6 +112,18 @@ export class TaskView extends ItemView {
     await this.commit(b => deleteTasks(b, [...this.selectedIds])); this.selected = null; this.selectedIds.clear(); this.inlineId = null;
     this.prepare(); this.draw(); await this.detail(); this.stage.focus({ preventScroll: true });
   }
+  private async toggleComplete(id: string): Promise<void> {
+    if (this.source !== 'current') return;
+    await this.finishTitle();
+    const node = this.tree.byId.get(id); if (!node || node.kind !== 'task') return;
+    const status = node.status === 'done' ? 'todo' : 'done';
+    // Reject an invalid completion before touching a draft, so child tasks can
+    // still be selected and completed without discarding a failed parent edit.
+    if (status === 'done' && this.tree.descendants(id).some(n => n.kind === 'task' && n.status !== 'done')) throw new Error('还有未完成子任务，请先处理后再完成父任务');
+    if (this.selected !== id) await this.select(id);
+    this.draft!.patch({ status }); await this.draft!.flush();
+    this.stage.querySelector<HTMLButtonElement>(`[data-node-id="${id}"] [data-map-complete]`)?.focus({ preventScroll: true });
+  }
   private updateVisibleNode(node: TaskNode): void {
     for (const card of this.stage.querySelectorAll<HTMLElement>('[data-node-id]')) {
       if (card.dataset.nodeId !== node.id) continue;
@@ -121,9 +133,9 @@ export class TaskView extends ItemView {
         if (info) info.textContent = `${STATUS[node.status]} · ${IMPORTANCE[node.importance]} · 截止 ${node.deadline || '未设置'} · ${node.estimate / 60}h · 上级 ${node.parent ? this.tree.byId.get(node.parent)?.title : 'root'}`;
       } else {
         card.classList.toggle('area', node.kind === 'area'); card.classList.toggle('task', node.kind === 'task'); card.classList.toggle('done', node.status === 'done');
-        const title = card.querySelector('button');
+        const title = card.querySelector('[data-map-title]');
         // Keep an active inline editor and pointer target mounted during asynchronous saves.
-        if (!card.querySelector('.obsb-task-inline-title') && title) title.textContent = `${node.kind === 'area' ? '' : node.status === 'done' ? '✓ ' : '○ '}${node.title}`;
+        if (!card.querySelector('.obsb-task-inline-title') && title) title.textContent = node.title;
         card.querySelector('small')?.remove();
         this.mapAppearance(card, node);
       }
@@ -134,6 +146,19 @@ export class TaskView extends ItemView {
     if (node.kind === 'task') card.dataset.importance = node.importance;
     else delete card.dataset.importance;
     card.dataset.status = node.status;
+    const title = card.querySelector('[data-map-title]');
+    title?.setAttribute('aria-label', (node.kind === 'task' ? node.status === 'done' ? '✓ ' : '○ ' : '') + node.title);
+    let complete = card.querySelector<HTMLButtonElement>('[data-map-complete]');
+    if (node.kind === 'task') {
+      if (!complete) {
+        complete = button(card, '', () => this.run(() => this.toggleComplete(node.id)));
+        complete.className = 'obsb-map-complete'; complete.dataset.mapComplete = 'true'; card.prepend(complete);
+      }
+      complete.textContent = node.status === 'done' ? '✓' : '○';
+      complete.title = (node.status === 'done' ? '恢复待办：' : '标记已完成：') + node.title;
+      complete.setAttribute('aria-label', complete.title); complete.setAttribute('aria-pressed', String(node.status === 'done'));
+      complete.disabled = this.source !== 'current';
+    } else complete?.remove();
     card.title = node.title + (node.kind === 'task' ? `\n${STATUS[node.status]} · 重要程度：${IMPORTANCE[node.importance]}${node.deadline ? ` · 截止：${node.deadline}` : ''}` : '\n领域') + (node.notes ? '\n有注释，选中后在右侧查看' : '');
   }
   private diagramKey(event: KeyboardEvent): void {
@@ -143,7 +168,7 @@ export class TaskView extends ItemView {
     }
     if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
     const target = event.target as HTMLElement;
-    if (target.closest('input,textarea,select,.obsb-map-fold,[contenteditable="true"]') || target.closest('button') && !target.closest('[data-node-id]')) return;
+    if (target.closest('input,textarea,select,.obsb-map-fold,.obsb-map-complete,[contenteditable="true"]') || target.closest('button') && !target.closest('[data-node-id]')) return;
     if (!['Tab', 'Insert', 'Enter', 'F2', ' ', 'Home', 'Delete', 'Backspace', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
     event.preventDefault(); event.stopPropagation(); if (event.repeat) return;
     void this.run(async () => {
@@ -186,7 +211,12 @@ export class TaskView extends ItemView {
     input.addEventListener('compositionstart', () => draft?.composition(true));
     input.addEventListener('compositionend', () => draft?.composition(false));
     input.addEventListener('change', () => { void draft?.flush().catch(report); });
-    input.addEventListener('blur', () => { void this.run(() => this.finishTitle(node.id)).catch(report); });
+    input.addEventListener('blur', event => {
+      // Keep the clicked completion button mounted until its click is delivered.
+      const next = (event as FocusEvent).relatedTarget as HTMLElement | null;
+      if (next?.closest?.('[data-map-complete]') && card.contains(next)) return;
+      void this.run(() => this.finishTitle(node.id)).catch(report);
+    });
     input.addEventListener('keydown', event => {
       if (event.isComposing || event.keyCode === 229 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || !['Enter', 'Tab', 'Escape'].includes(event.key)) return;
       event.preventDefault(); event.stopPropagation(); if (event.repeat) return;
@@ -428,7 +458,7 @@ export class TaskView extends ItemView {
         if (n && !matches.has(n.id)) card.classList.add('context');
         if (n && this.inlineId === n.id) this.titleInput(card, n);
         else {
-          const title = el(card, 'button', n ? (n.kind === 'area' ? '' : n.status === 'done' ? '✓ ' : '○ ') + n.title : 'root');
+          const title = el(card, 'button', n?.title ?? 'root');
           title.type = 'button'; title.dataset.mapTitle = 'true';
           title.addEventListener('click', event => {
             const id = n?.id;

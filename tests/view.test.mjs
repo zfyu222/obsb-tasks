@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { TaskView, Modal, MarkdownRenderer, NodeDraft, newNode, emptyBoard, TaskStore, CURRENT, upsert } from '../.test-build/view.mjs';
+import { TaskView, Modal, Notice, MarkdownRenderer, NodeDraft, newNode, emptyBoard, TaskStore, CURRENT, upsert } from '../.test-build/view.mjs';
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { pretendToBeVisual: true });
 Object.assign(globalThis, { window: dom.window, document: dom.window.document, requestAnimationFrame: dom.window.requestAnimationFrame.bind(dom.window), cancelAnimationFrame: dom.window.cancelAnimationFrame.bind(dom.window) });
 const tick = () => new Promise(resolve => setTimeout(resolve, 25));
-const find = (root, label) => [...root.querySelectorAll('button')].find(b => b.textContent === label);
+const find = (root, label) => [...root.querySelectorAll('button')].find(b => b.textContent === label || b.hasAttribute('data-map-title') && b.getAttribute('aria-label') === label);
 const key = (element, value, options = {}) => {
   const e = new dom.window.KeyboardEvent('keydown', { key: value, bubbles: true, cancelable: true, ...options }); element.dispatchEvent(e); return e;
 };
@@ -249,7 +249,7 @@ test('compact title-only map keeps priority, status and tooltip synchronized thr
     assert.equal(card().dataset.importance, 'high'); assert.match(card().title, /重要程度：高/);
     inputValue(field(view, 'status'), 'done'); await tick();
     assert.ok(card().classList.contains('done')); assert.equal(card().dataset.status, 'done');
-    assert.equal(card().querySelector('[data-map-title]').textContent, '✓ 任务1');
+    assert.equal(card().querySelector('[data-map-title]').textContent, '任务1');
     inputValue(field(view, 'title'), '长任务名称'.repeat(30)); await tick();
     assert.ok(card().title.startsWith('长任务名称'.repeat(30))); assert.equal(card().style.width, '420px');
     inputValue(field(view, 'kind'), 'area'); await tick();
@@ -259,6 +259,76 @@ test('compact title-only map keeps priority, status and tooltip synchronized thr
     assert.equal(card().dataset.importance, 'high'); assert.equal(card().querySelector('small'), null);
     inputValue(field(view, 'status'), 'cancelled'); await tick();
     assert.equal(card().dataset.status, 'cancelled'); assert.equal(card().style.height, '24px');
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
+
+test('node completion button completes and reopens with timestamps, native activation and undo/redo', async () => {
+  const { view, plugin } = await setup();
+  try {
+    const id = view.board.nodes.find(n => n.title === '任务1').id;
+    const toggle = () => view.contentEl.querySelector(`[data-node-id="${id}"] [data-map-complete]`);
+    const original = toggle(); assert.equal(original.textContent, '○'); assert.equal(original.getAttribute('aria-pressed'), 'false');
+    assert.equal(key(original, 'Enter').defaultPrevented, false); assert.equal(key(original, ' ').defaultPrevented, false);
+    original.click(); await tick();
+    let saved = (await plugin.store.load()).nodes.find(n => n.id === id);
+    assert.equal(saved.status, 'done'); assert.ok(saved.completed); const completed = saved.completed;
+    assert.equal(toggle(), original); assert.equal(toggle().textContent, '✓'); assert.equal(toggle().getAttribute('aria-pressed'), 'true');
+    assert.equal(field(view, 'status').value, 'done');
+    toggle().click(); await tick();
+    saved = (await plugin.store.load()).nodes.find(n => n.id === id); assert.equal(saved.status, 'todo'); assert.equal(saved.completed, '');
+    key(toggle(), 'z', { ctrlKey: true }); await tick();
+    saved = (await plugin.store.load()).nodes.find(n => n.id === id); assert.equal(saved.status, 'done'); assert.equal(saved.completed, completed);
+    key(view.contentEl.querySelector('.obsb-task-stage'), 'y', { ctrlKey: true }); await tick();
+    assert.equal((await plugin.store.load()).nodes.find(n => n.id === id).status, 'todo');
+    assert.equal((await plugin.store.load()).nodes.length, 3);
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
+
+test('invalid parent completion leaves no failed draft, children remain actionable and archive controls are readonly', async () => {
+  const { view, plugin } = await setup();
+  try {
+    const parent = view.board.nodes.find(n => n.title === '任务1'), child = view.board.nodes.find(n => n.title === '任务2');
+    await view.move([child.id], parent.id, 'child');
+    const toggle = id => view.contentEl.querySelector(`[data-node-id="${id}"] [data-map-complete]`);
+    toggle(child.id).click(); await tick(); // reopen the completed child
+    toggle(parent.id).click(); await tick();
+    assert.match(Notice.messages.at(-1), /还有未完成子任务/); assert.equal(view.draft.dirty, false);
+    assert.equal((await plugin.store.load()).nodes.find(n => n.id === parent.id).status, 'todo');
+    toggle(child.id).click(); await tick(); toggle(parent.id).click(); await tick();
+    assert.equal((await plugin.store.load()).nodes.find(n => n.id === parent.id).status, 'done');
+    assert.equal(view.contentEl.querySelector('.obsb-core-node.area [data-map-complete]'), null);
+    await view.archive(); find(Modal.opened.at(-1).contentEl, '确认').click(); await tick();
+    find(view.contentEl, '任务归档').click(); await tick();
+    const archived = view.contentEl.querySelector('[data-map-complete]'); assert.ok(archived.disabled);
+    const before = await plugin.store.load(); archived.click(); await tick(); assert.deepEqual(await plugin.store.load(), before);
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
+
+test('clicking the completion control while renaming saves the name and completes on the same click', async () => {
+  const { view, plugin } = await setup();
+  try {
+    find(view.contentEl, '○ 任务1').click(); await tick();
+    key(view.contentEl.querySelector('.obsb-task-stage'), 'F2'); await tick();
+    const input = view.contentEl.querySelector('.obsb-task-inline-title'); inputValue(input, '边改名边完成', false);
+    const toggle = input.parentElement.querySelector('[data-map-complete]');
+    toggle.focus(); await tick(); assert.ok(toggle.isConnected, 'blur must not remove the pressed button before click');
+    toggle.click(); await tick();
+    assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null);
+    const saved = (await plugin.store.load()).nodes.find(n => n.title === '边改名边完成'); assert.equal(saved.status, 'done'); assert.ok(saved.completed);
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
+
+test('failed completion save keeps the visible button unchanged and can be retried without losing data', async () => {
+  const { view, plugin } = await setup();
+  try {
+    find(view.contentEl, '○ 任务1').click(); await tick();
+    const change = plugin.store.change.bind(plugin.store); let fail = true;
+    plugin.store.change = (...args) => fail ? Promise.reject(new Error('完成状态写入失败')) : change(...args);
+    const toggle = view.contentEl.querySelector('.obsb-core-node.task [data-map-complete][aria-pressed="false"]'); toggle.click(); await tick();
+    assert.equal(toggle.getAttribute('aria-pressed'), 'false'); assert.match(view.contentEl.textContent, /完成状态写入失败/);
+    assert.equal((await plugin.store.load()).nodes.find(n => n.title === '任务1').status, 'todo');
+    fail = false; find(view.contentEl, '重试保存').click(); await tick();
+    assert.equal(toggle.getAttribute('aria-pressed'), 'true'); assert.equal((await plugin.store.load()).nodes.find(n => n.title === '任务1').status, 'done');
   } finally { await view.onClose(); view.contentEl.remove(); }
 });
 

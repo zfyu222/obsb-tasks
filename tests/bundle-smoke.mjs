@@ -26,6 +26,10 @@ const card = view.contentEl.querySelector('.obsb-core-node.task');
 assert.equal(card.style.height, '24px'); assert.equal(card.querySelector('small'), null); assert.equal(card.dataset.importance, 'medium');
 const importance = view.contentEl.querySelector('[data-field=importance]'); importance.value = 'high'; importance.dispatchEvent(new dom.window.Event('change')); await tick();
 assert.equal(card.dataset.importance, 'high'); assert.match(card.title, /重要程度：高/);
+card.querySelector('[data-map-complete]').click(); await tick(); assert.equal((await plugin.store.load()).nodes[0].status, 'done');
+assert.equal(card.querySelector('[data-map-complete]').getAttribute('aria-pressed'), 'true');
+card.querySelector('[data-map-complete]').click(); await tick(); assert.equal((await plugin.store.load()).nodes[0].status, 'todo');
+assert.equal((await plugin.store.load()).nodes[0].completed, '');
 assert.ok(view.contentEl.querySelector('svg.obsb-map-paths path').getAttribute('d').includes('C'));
 const kind = view.contentEl.querySelector('[data-field=kind]'); kind.value = 'area'; kind.dispatchEvent(new dom.window.Event('change')); await tick();
 assert.equal((await plugin.store.load()).nodes[0].kind, 'area');
@@ -40,7 +44,7 @@ const path = 'Raw/任务管理/当前任务.md', before = await plugin.store.loa
 const file = plugin.app.vault.getAbstractFileByPath(path), legacy = legacyBoard(before);
 file.data = legacy; plugin.store.invalidate(); await view.reload();
 const taskCard = [...view.contentEl.querySelectorAll('.obsb-task-card')].find(e => e.textContent.includes('实际发布包节点'));
-taskCard.querySelector('button').click(); await tick();
+taskCard.querySelector('[data-map-title]').click(); await tick();
 const notes = view.contentEl.querySelector('[data-field=notes]'); notes.value = 'AI 可直接阅读 [[设计]]'; notes.dispatchEvent(new dom.window.Event('input'));
 plugin.app.workspace.getLeavesOfType = () => [{ view }];
 assert.ok(plugin.commands.has('migrate-markdown')); plugin.commands.get('migrate-markdown').callback(); await tick(); await tick();
@@ -54,7 +58,7 @@ dot = view.contentEl.querySelector('.obsb-map-fold'); assert.equal(dot.getAttrib
 dot.click(); await tick(); assert.equal(view.contentEl.querySelector('.obsb-map-fold').getAttribute('aria-expanded'), 'true');
 view.contentEl.querySelector('.obsb-core-node.root [data-map-title]').click(); await tick();
 assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null);
-const childTitle = [...view.contentEl.querySelectorAll('[data-map-title]')].find(e => e.textContent === '○ 新任务');
+const childTitle = [...view.contentEl.querySelectorAll('[data-map-title]')].find(e => e.textContent === '新任务');
 childTitle.click(); await tick(); press(stage(), 'F2'); await tick();
 input = view.contentEl.querySelector('.obsb-task-inline-title'); input.value = '点击别处退出'; input.dispatchEvent(new dom.window.Event('input'));
 view.contentEl.querySelector('.obsb-core-node.root [data-map-title]').click(); await tick();
