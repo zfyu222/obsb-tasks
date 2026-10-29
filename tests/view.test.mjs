@@ -29,6 +29,35 @@ async function setup(count = 3) {
   document.body.append(view.contentEl); await view.onOpen();
   return { view, plugin, data, area };
 }
+test('inline title grows and shrinks before autosave, preserves composition, caret and editor DOM', async () => {
+  const { view, plugin } = await setup();
+  try {
+    find(view.contentEl, '○ 任务1').click(); await tick();
+    key(view.contentEl.querySelector('.obsb-task-stage'), 'F2'); await tick();
+    const input = view.contentEl.querySelector('.obsb-task-inline-title'), card = input.parentElement;
+    const width = parseFloat(card.style.width), original = input.value;
+    input.dispatchEvent(new dom.window.CompositionEvent('compositionstart', { bubbles: true }));
+    inputValue(input, '正在输入中文和很长的任务名称'.repeat(3), false); input.setSelectionRange(4, 4); await tick();
+    assert.ok(parseFloat(card.style.width) > width); assert.equal(document.activeElement, input); assert.equal(input.selectionStart, 4);
+    assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), input);
+    assert.equal((await plugin.store.load()).nodes.find(n => n.id === card.dataset.nodeId).title, original);
+    inputValue(input, '短', false); await tick(); assert.ok(parseFloat(card.style.width) < width);
+    input.dispatchEvent(new dom.window.CompositionEvent('compositionend', { bubbles: true }));
+    key(input, 'Enter'); await tick(); assert.equal((await plugin.store.load()).nodes.find(n => n.id === card.dataset.nodeId).title, '短');
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
+
+test('long area editor expands beyond display cap and Escape restores compact geometry and original title', async () => {
+  const { view, plugin, area } = await setup();
+  try {
+    find(view.contentEl, area.title).click(); await tick(); key(view.contentEl.querySelector('.obsb-task-stage'), 'F2'); await tick();
+    const input = view.contentEl.querySelector('.obsb-task-inline-title'), card = input.parentElement, width = parseFloat(card.style.width);
+    inputValue(input, '长名称'.repeat(100), false); await tick(); assert.ok(parseFloat(card.style.width) > 420); assert.ok(parseFloat(card.style.width) <= 800);
+    key(input, 'Escape'); await tick(); assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null);
+    assert.equal(parseFloat(card.style.width), width); assert.equal((await plugin.store.load()).nodes.find(n => n.id === area.id).title, area.title);
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
+
 test('map and list share current data, completed nodes visible; notes render only on selection', async () => {
   MarkdownRenderer.calls = [];
   const { view } = await setup();

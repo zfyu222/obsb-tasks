@@ -44,6 +44,7 @@ export class TaskView extends ItemView {
   private history = new TaskHistory();
   private revealNext = false;
   private measure?: (text: string) => number;
+  private titleLayoutFrame = 0;
   constructor(leaf: WorkspaceLeaf, public plugin: TaskPlugin) { super(leaf); }
   getViewType(): string { return 'obsb-tasks-view'; }
   getDisplayText(): string { return '任务管理'; }
@@ -51,6 +52,8 @@ export class TaskView extends ItemView {
   async onOpen(): Promise<void> { this.closed = false; this.ready = this.reload(); await this.ready; }
   async onClose(): Promise<void> {
     this.closed = true;
+    if (this.titleLayoutFrame) cancelAnimationFrame(this.titleLayoutFrame);
+    this.titleLayoutFrame = 0;
     try { await this.flush(); } catch (e) {
       report(e);
       if (this.draft?.dirty) await this.plugin.keepDraft?.(this.draft.value);
@@ -69,6 +72,7 @@ export class TaskView extends ItemView {
     await this.flush();
     if (!id || this.inlineId !== id) return;
     this.inlineId = null;
+    this.graph?.setGeometry(this.geometry(this.matches()));
     // Only replace this node's editor. Rebuilding the viewport on blur would
     // cancel the pointer gesture that is selecting the next node or blank area.
     this.graph?.refreshNode(id);
@@ -207,9 +211,9 @@ export class TaskView extends ItemView {
     const input = el(card, 'input'); input.className = 'obsb-task-inline-title'; input.setAttribute('aria-label', '节点名称');
     const draft = this.draft;
     input.value = draft?.value.title ?? node.title;
-    input.addEventListener('input', () => draft?.patch({ title: input.value }));
+    input.addEventListener('input', () => { draft?.patch({ title: input.value }); this.resizeTitle(); });
     input.addEventListener('compositionstart', () => draft?.composition(true));
-    input.addEventListener('compositionend', () => draft?.composition(false));
+    input.addEventListener('compositionend', () => { draft?.composition(false); this.resizeTitle(); });
     input.addEventListener('change', () => { void draft?.flush().catch(report); });
     input.addEventListener('blur', event => {
       // Keep the clicked completion button mounted until its click is delivered.
@@ -227,6 +231,17 @@ export class TaskView extends ItemView {
         if (event.key === 'Tab') await this.createRelative(true);
         else this.stage.focus({ preventScroll: true });
       }).catch(report);
+    });
+  }
+  private resizeTitle(): void {
+    // Refresh layout like Enhancing Mindmap's renderEditNode, without replacing
+    // the focused editor or waiting for the draft's debounced disk write.
+    if (this.titleLayoutFrame) return;
+    this.titleLayoutFrame = requestAnimationFrame(() => {
+      this.titleLayoutFrame = 0;
+      if (this.closed || !this.inlineId || !this.graph) return;
+      this.graph.setGeometry(this.geometry(this.matches()));
+      this.graph.reveal(this.inlineId);
     });
   }
   externalChange(): void {
@@ -396,7 +411,9 @@ export class TaskView extends ItemView {
       if (context) { context.font = '13px ' + (getComputedStyle(this.stage).fontFamily || 'sans-serif'); this.measure = text => context.measureText(text).width; }
     }
     const filtered = !!this.query || !!this.status || this.source === 'period';
-    return layoutGraph(this.tree, include, filtered ? new Set() : this.collapsed, this.focusId, this.direction, this.measure);
+    const editing = this.inlineId && this.draft?.value.id === this.inlineId
+      ? { id: this.inlineId, title: this.draft.value.title, maxWidth: Math.max(44, Math.min(800, (this.graph?.viewport.clientWidth || 840) / this.camera.scale - 40)) } : undefined;
+    return layoutGraph(this.tree, include, filtered ? new Set() : this.collapsed, this.focusId, this.direction, this.measure, editing);
   }
   private async navigate(key: string): Promise<void> {
     if (!this.graph) return;

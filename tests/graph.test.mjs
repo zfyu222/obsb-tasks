@@ -19,6 +19,17 @@ function viewport(readonly = false, overrides = {}) {
   const v = new GraphViewport(element, camera, hooks, readonly);
   return { element, camera, calls, v };
 }
+test('draft title geometry moves descendants in both layouts without changing saved data', () => {
+  const a = node('领域', 'area'), t = node('任务', 'task', a.id), child = node('子任务', 'task', t.id);
+  const nodes = [a, t, child], tree = new Tree(nodes), include = new Set(nodes.map(n => n.id));
+  for (const direction of ['mindmap', 'right']) {
+    const before = layoutGraph(tree, include, new Set(), undefined, direction);
+    const after = layoutGraph(tree, include, new Set(), undefined, direction, undefined, { id: t.id, title: '长标题'.repeat(30), maxWidth: 800 });
+    assert.ok(after.nodes.get(t.id).box.width > 420); assert.notEqual(after.nodes.get(child.id).box.x, before.nodes.get(child.id).box.x);
+    assert.equal(tree.byId.get(t.id).title, '任务'); assert.notDeepEqual(after.curves, before.curves);
+  }
+});
+
 test('actual fork layout balances both sides, measures titles and emits cubic curves', () => {
   const a = node('AAA 项目', 'area'), b = node('个人生活', 'area'), t = node('完成注册系统开发', 'task', a.id), c = node('需求确认', 'task', t.id);
   const nodes = [a, t, c, b], tree = new Tree(nodes), g = layoutGraph(tree, new Set(nodes.map(n => n.id)), new Set());

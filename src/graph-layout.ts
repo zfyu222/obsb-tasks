@@ -13,12 +13,12 @@ export function bounds(nodes: LayoutNode[]): Box {
   for (const node of nodes) { const b = node.getBox(); x = Math.min(x, b.x); y = Math.min(y, b.y); right = Math.max(right, b.x + b.width); bottom = Math.max(bottom, b.y + b.height); }
   return { x, y, width: right - x, height: bottom - y, right, bottom };
 }
-export function titleSize(title: string, task = false, measure?: (text: string) => number): { width: number; height: number } {
+export function titleSize(title: string, task = false, measure?: (text: string) => number, maxWidth = 420): { width: number; height: number } {
   const textWidth = measure ? measure(title) : [...title].reduce((w, c) => w + (/[^\x00-\xff]/.test(c) ? 13 : 7), 0);
-  return { width: Math.min(420, Math.max(44, textWidth + (task ? 32 : 14))), height: 24 };
+  return { width: Math.min(maxWidth, Math.max(44, textWidth + (task ? 32 : 14))), height: 24 };
 }
 export function layoutGraph(tree: Tree, include: Set<string>, collapsed: Set<string>, focus?: string,
-  direction: 'mindmap' | 'right' = 'mindmap', measure?: (text: string) => number): GraphGeometry {
+  direction: 'mindmap' | 'right' = 'mindmap', measure?: (text: string) => number, editing?: { id: string; title: string; maxWidth: number }): GraphGeometry {
   const curves = new Map<string, Curve[]>(); let owner = '';
   const recorder = {
     clear() { curves.clear(); }, group() { return this; },
@@ -42,7 +42,8 @@ export function layoutGraph(tree: Tree, include: Set<string>, collapsed: Set<str
     },
     getBoundingRect: bounds };
   const make = (task: TaskNode | undefined, parent?: GraphNode): GraphNode => {
-    const id = task?.id ?? GRAPH_ROOT, classes = new Set<string>(), size = titleSize(task?.title ?? 'root', task?.kind === 'task', measure);
+    const id = task?.id ?? GRAPH_ROOT, classes = new Set<string>();
+    const size = titleSize(editing?.id === id ? editing.title : task?.title ?? 'root', task?.kind === 'task', measure, editing?.id === id ? editing.maxWidth : 420);
     const node: GraphNode = {
       id, task, parent, children: [], direct: '', stroke: '', isExpand: !collapsed.has(id), mindmap: host,
       level: parent ? parent.level + 1 : 0, box: { x: 0, y: 0, ...size },
