@@ -28,7 +28,9 @@ export function layoutGraph(tree: Tree, include: Set<string>, collapsed: Set<str
         fill(_value: string) { return shape; }, plot(d: string) { curve.d = d; const list = curves.get(curve.owner) ?? []; list.push(curve); curves.set(curve.owner, list); return shape; } };
       return shape;
     },
-    line(x1: number, y1: number, x2: number, y2: number) { const shape = this.path(); shape.plot(`M${x1} ${y1} L${x2} ${y2}`); return shape; }
+    // The fork draws decorative baselines below labels through line(). Keep
+    // its chainable shape API, but record only the actual parent-child curves.
+    line(_x1: number, _y1: number, _x2: number, _y2: number) { return this.path(); }
   };
   const order: GraphNode[] = [], nodes = new Map<string, GraphNode>();
   const host: LayoutHost = { edgeGroup: recorder,
