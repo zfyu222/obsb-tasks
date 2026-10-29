@@ -60,5 +60,17 @@ input = view.contentEl.querySelector('.obsb-task-inline-title'); input.value = '
 view.contentEl.querySelector('.obsb-core-node.root [data-map-title]').click(); await tick();
 assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null);
 assert.ok((await plugin.store.load()).nodes.some(n => n.title === '点击别处退出'));
+const dragBefore = await plugin.store.load(), moving = dragBefore.nodes.find(n => n.title === '点击别处退出');
+const sourceCard = view.contentEl.querySelector(`[data-node-id="${moving.id}"]`), rootCard = view.contentEl.querySelector('.obsb-core-node.root');
+sourceCard.getBoundingClientRect = () => ({ left: 20, top: 20, right: 120, bottom: 44, width: 100, height: 24 });
+rootCard.getBoundingClientRect = () => ({ left: 200, top: 100, right: 250, bottom: 124, width: 50, height: 24 });
+document.elementFromPoint = () => rootCard;
+const pointer = (target, type, x, y) => { const e = new dom.window.MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 }); Object.defineProperties(e, { pointerId: { value: 13 }, pointerType: { value: 'mouse' } }); target.dispatchEvent(e); };
+pointer(sourceCard, 'pointerdown', 30, 30); pointer(document, 'pointermove', 220, 110);
+assert.equal(view.contentEl.querySelector('.obsb-map-drag-preview').hidden, false);
+assert.match(view.contentEl.querySelector('.obsb-map-drag-status').textContent, /放入.*root/);
+assert.equal((await plugin.store.load()).nodes.find(n => n.id === moving.id).parent, moving.parent);
+pointer(document, 'pointerup', 220, 110); await tick(); assert.equal((await plugin.store.load()).nodes.find(n => n.id === moving.id).parent, null);
+press(stage(), 'z', { ctrlKey: true }); await tick(); assert.equal((await plugin.store.load()).nodes.find(n => n.id === moving.id).parent, moving.parent);
 await view.onClose();
-console.log('Production bundle: inline editor exit, round toggles, compact nodes, live priority and safe Markdown migration passed');
+console.log('Production bundle: drag preview/drop/undo, inline editor exit, round toggles and safe Markdown migration passed');

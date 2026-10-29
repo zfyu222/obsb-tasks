@@ -11,11 +11,11 @@ const pointer = (target, type, x, y, options = {}) => {
   Object.defineProperties(e, { pointerId: { value: options.id ?? 1 }, pointerType: { value: options.touch ? 'touch' : 'mouse' } });
   target.dispatchEvent(e); return e;
 };
-function viewport(readonly = false) {
+function viewport(readonly = false, overrides = {}) {
   const element = document.createElement('div'); document.body.append(element);
   const camera = { x: 100, y: 80, scale: 1, initialized: true }, calls = [];
   const hooks = { paint: () => calls.push(['paint']), selected: () => ['existing'], select: (ids, id) => calls.push(['select', ids, id]),
-    marquee: (rect, additive) => calls.push(['marquee', rect, additive]), move: (...args) => calls.push(['move', ...args]), edit: id => calls.push(['edit', id]) };
+    marquee: (rect, additive) => calls.push(['marquee', rect, additive]), move: (...args) => calls.push(['move', ...args]), edit: id => calls.push(['edit', id]), ...overrides };
   const v = new GraphViewport(element, camera, hooks, readonly);
   return { element, camera, calls, v };
 }
@@ -93,6 +93,58 @@ test('drag placement recognizes child, before, after; readonly cannot move', () 
   const { element, calls, v } = viewport(true), card = document.createElement('div'); card.dataset.nodeId = 'node-a'; element.append(card);
   pointer(card, 'pointerdown', 10, 10); pointer(document, 'pointermove', 100, 100); pointer(document, 'pointerup', 100, 100);
   assert.equal(calls.some(c => c[0] === 'move'), false); v.destroy(); element.remove();
+});
+
+const rect = (left, top, width, height) => ({ left, top, width, height, x: left, y: top, right: left + width, bottom: top + height });
+function dragCards(element) {
+  element.getBoundingClientRect = () => rect(10, 20, 600, 400);
+  const a = document.createElement('div'), b = document.createElement('div');
+  a.dataset.nodeId = 'node-a'; b.dataset.nodeId = 'node-b';
+  for (const [card, name] of [[a, '任务A'], [b, '目标B']]) { const title = document.createElement('button'); title.dataset.mapTitle = 'true'; title.textContent = name; card.append(title); }
+  a.getBoundingClientRect = () => rect(50, 60, 90, 24); b.getBoundingClientRect = () => rect(200, 100, 120, 24);
+  element.append(a, b); document.elementFromPoint = () => b; return { a, b };
+}
+test('drag image follows the pointer at zoom scale and exposes child/before/after insertion feedback', () => {
+  const { element, camera, calls, v } = viewport(), { a, b } = dragCards(element); camera.scale = 0.5;
+  pointer(a, 'pointerdown', 60, 70); pointer(document, 'pointermove', 220, 110);
+  const preview = element.querySelector('.obsb-map-drag-preview'), indicator = element.querySelector('.obsb-map-drop-indicator'), status = element.querySelector('.obsb-map-drag-status');
+  assert.equal(preview.hidden, false); assert.equal(preview.style.left, '200px'); assert.equal(preview.style.top, '54px'); assert.equal(preview.style.transform, 'scale(0.5)');
+  assert.match(preview.textContent, /任务A/); assert.equal(preview.querySelector('[data-node-id]'), null);
+  assert.ok(a.classList.contains('is-drag-source')); assert.equal(indicator.dataset.placement, 'child'); assert.match(status.textContent, /放入.*目标B/);
+  document.elementFromPoint = () => null; // Small gaps beside the target are still discoverable.
+  pointer(document, 'pointermove', 220, 98); assert.equal(indicator.dataset.placement, 'before'); assert.match(status.textContent, /之前/);
+  pointer(document, 'pointermove', 220, 126); assert.equal(indicator.dataset.placement, 'after'); assert.match(status.textContent, /之后/);
+  assert.equal(calls.some(c => c[0] === 'move'), false, 'preview does not persist a move');
+  pointer(document, 'pointerup', 220, 126);
+  assert.deepEqual(calls.find(c => c[0] === 'move').slice(1), [['node-a'], 'node-b', 'after']);
+  assert.equal(preview.hidden, true); assert.equal(indicator.hidden, true); assert.equal(status.hidden, true); assert.ok(!a.classList.contains('is-drag-source'));
+  v.destroy(); assert.equal(element.querySelector('.obsb-map-drag-preview'), null); element.remove();
+});
+
+test('invalid drops, escape, cancellation, lost capture and release outside never commit stale targets', () => {
+  for (const mode of ['invalid', 'Escape', 'pointercancel', 'lostpointercapture', 'blur', 'outside']) {
+    const { element, calls, v } = viewport(false, mode === 'invalid' ? { dropError: () => '任务下不能放领域' } : {});
+    const { a, b } = dragCards(element); pointer(a, 'pointerdown', 60, 70); pointer(document, 'pointermove', 220, 110);
+    if (mode === 'invalid') { assert.match(element.querySelector('.obsb-map-drag-status').textContent, /任务下不能放领域/); assert.ok(b.classList.contains('drop-invalid')); }
+    if (mode === 'Escape') document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    if (mode === 'pointercancel') pointer(document, 'pointercancel', 220, 110);
+    if (mode === 'lostpointercapture') pointer(element, 'lostpointercapture', 220, 110);
+    if (mode === 'blur') window.dispatchEvent(new dom.window.Event('blur'));
+    pointer(document, 'pointerup', mode === 'outside' ? 900 : 220, mode === 'outside' ? 900 : 110);
+    assert.equal(calls.some(c => c[0] === 'move'), false, mode);
+    assert.equal(element.querySelector('.obsb-map-drag-preview').hidden, true); assert.equal(element.querySelector('.obsb-map-drop-indicator').hidden, true);
+    assert.ok(!a.classList.contains('is-drag-source')); v.destroy(); element.remove();
+  }
+});
+
+test('multi-selection drag uses a bounded preview instead of cloning every selected node', () => {
+  const ids = Array.from({ length: 1000 }, (_, i) => `node-${i}`), { element, calls, v } = viewport(false, { selected: () => ids });
+  for (const id of ids) { const card = document.createElement('div'); card.dataset.nodeId = id; card.textContent = id; element.append(card); }
+  document.elementFromPoint = () => null;
+  pointer(element.querySelector('[data-node-id="node-0"]'), 'pointerdown', 20, 20); pointer(document, 'pointermove', 150, 150);
+  const preview = element.querySelector('.obsb-map-drag-preview'); assert.equal(preview.childElementCount, 6); assert.match(preview.textContent, /1000 个分支/);
+  assert.equal(element.querySelectorAll('[data-node-id]').length, 1000); assert.equal(calls.some(c => c[0] === 'move'), false);
+  v.destroy(); element.remove();
 });
 test('zoom preserves the world point under the cursor, pinch is anchored and cancels on blur', () => {
   const camera = { x: 100, y: 50, scale: 1, initialized: true }, point = { x: (300 - camera.x) / camera.scale, y: (200 - camera.y) / camera.scale };

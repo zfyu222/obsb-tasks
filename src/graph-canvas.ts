@@ -1,6 +1,6 @@
 import { GraphGeometry, GraphNode, GRAPH_ROOT } from './graph-layout';
 import { Camera, GraphViewport } from './graph-viewport';
-import { intersectsRect, selectionRoots, containsNode } from './vendor/enhancing-mindmap/selection';
+import { intersectsRect, selectionRoots } from './vendor/enhancing-mindmap/selection';
 
 export interface CanvasActions {
   render(card: HTMLElement, node: GraphNode): void;
@@ -34,22 +34,33 @@ export class GraphCanvas {
     }
     this.gestures = new GraphViewport(this.viewport, camera, {
       paint: () => this.requestPaint(), selected: () => [...actions.selected()], select: (ids, primary) => actions.select(ids, primary), edit: id => actions.edit(id),
+      dragRoots: ids => selectionRoots(ids.map(id => this.geometry.nodes.get(id)).filter((n): n is GraphNode => !!n && n !== this.geometry.root)).map(n => n.id),
+      dropError: (ids, target, placement) => this.dropError(ids, target, placement),
       marquee: (rect, additive) => {
         const selected = additive ? new Set(actions.selected()) : new Set<string>();
         for (const [id, card] of this.mounted) if (id !== GRAPH_ROOT && intersectsRect(rect, card.getBoundingClientRect())) selected.add(id);
         const ids = [...selected]; actions.select(ids, ids[ids.length - 1]);
       },
       move: (ids, target, placement) => {
-        const rootNodes = selectionRoots(ids.map(id => this.geometry.nodes.get(id)).filter((n): n is GraphNode => !!n && n !== this.geometry.root));
         const drop = this.geometry.nodes.get(target || this.geometry.root.id);
-        if (!drop || rootNodes.some(n => containsNode(n, drop))) return;
-        actions.move(rootNodes.map(n => n.id), drop.task?.id ?? null, placement);
+        if (!drop || this.dropError(ids, target, placement)) return;
+        actions.move(ids, drop.task?.id ?? null, placement);
       }
     }, readonly);
     if (typeof ResizeObserver !== 'undefined') { this.resize = new ResizeObserver(() => this.requestPaint()); this.resize.observe(this.viewport); }
     this.paint();
   }
   requestPaint(): void { if (!this.frame && !this.disposed) this.frame = requestAnimationFrame(() => { this.frame = 0; this.paint(); }); }
+  private dropError(ids: string[], target: string, placement: 'child' | 'before' | 'after'): string | undefined {
+    const roots = ids.map(id => this.geometry.nodes.get(id)), drop = this.geometry.nodes.get(target || this.geometry.root.id);
+    if (!roots.length || roots.some(n => !n || n === this.geometry.root)) return '中心节点不能移动';
+    if (!drop) return '目标节点已变化';
+    const selected = new Set(ids);
+    for (let node: GraphNode | undefined = drop; node; node = node.parent) if (selected.has(node.id)) return '不能移到自身或自己的子树';
+    if (placement !== 'child' && !drop.parent) return '不能放在中心节点之前或之后';
+    const parent = placement === 'child' ? drop : drop.parent;
+    if (parent?.task?.kind === 'task' && roots.some(n => n?.task?.kind === 'area')) return '任务下不能放领域';
+  }
   setGeometry(geometry: GraphGeometry): void {
     this.geometry = geometry; this.sorted = [...geometry.order].sort((a, b) => a.box.y - b.box.y); this.paint();
   }

@@ -76,6 +76,20 @@
 .obsb-core-node.drop-before::before { top:-5px; }.obsb-core-node.drop-after::after { bottom:-5px; }
 .obsb-map-marquee { position:absolute; z-index:10; border:1px solid var(--interactive-accent); background:var(--interactive-accent); opacity:0.18; pointer-events:none; }
 .obsb-map-marquee[hidden] { display:none; }
+.obsb-map-drag-preview { position:absolute; z-index:20; transform-origin:0 0; opacity:0.85; filter:drop-shadow(0 3px 5px rgba(0,0,0,0.2)); }
+.obsb-map-drag-preview,.obsb-map-drag-preview * { pointer-events:none !important; }
+.obsb-map-drag-preview .obsb-core-node { max-width:420px; }
+.obsb-map-drag-count { white-space:nowrap; font-size:12px; color:var(--text-normal); background:var(--background-primary); border:1px solid var(--background-modifier-border); border-radius:4px; padding:3px 6px; }
+.obsb-core-node.is-drag-source { opacity:0.3 !important; }
+.obsb-map-viewport.is-node-dragging,.obsb-map-viewport.is-node-dragging * { cursor:grabbing; }
+.obsb-map-viewport.is-drop-invalid,.obsb-map-viewport.is-drop-invalid * { cursor:not-allowed; }
+.obsb-map-drop-indicator { position:absolute; z-index:19; pointer-events:none; box-sizing:border-box; border-radius:3px; background:var(--interactive-accent); }
+.obsb-map-drop-indicator[data-placement=child] { border:2px solid var(--interactive-accent); background:transparent; box-shadow:0 0 0 2px var(--background-primary); }
+.obsb-map-drop-indicator:not([data-placement=child])::before { content:''; position:absolute; left:-3px; top:-2px; width:6px; height:6px; border-radius:50%; background:var(--interactive-accent); }
+.obsb-map-drag-status { position:absolute; z-index:21; max-width:240px; padding:5px 8px; border:1px solid var(--interactive-accent); border-radius:5px; background:var(--background-primary); color:var(--text-normal); font-size:12px; line-height:18px; pointer-events:none; box-shadow:0 2px 6px rgba(0,0,0,0.15); }
+.obsb-map-drag-status.is-invalid { color:var(--text-error); border-color:var(--text-error); }
+.obsb-core-node.drop-invalid { box-shadow:0 0 0 2px var(--text-error); }
+.obsb-map-drag-preview[hidden],.obsb-map-drop-indicator[hidden],.obsb-map-drag-status[hidden] { display:none; }
 @media (max-width:700px) {
   .obsb-tasks { padding:8px; }
   .obsb-task-body { flex-direction:column; }

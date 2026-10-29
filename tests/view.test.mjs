@@ -365,6 +365,32 @@ test('canonical Markdown subtree order preserves move, sibling reorder and undo/
     assert.equal((await plugin.store.load()).nodes.find(n => n.id === child.id).parent, root.id);
   } finally { await view.onClose(); view.contentEl.remove(); }
 });
+
+test('drag feedback rejects cycles and area-under-task before drop, and a valid preview commits once with undo', async () => {
+  const { view, plugin, area } = await setup();
+  try {
+    const before = await plugin.store.load(), task = before.nodes.find(n => n.title === '任务1'), child = before.nodes.find(n => n.title === '任务2');
+    const viewport = view.contentEl.querySelector('.obsb-map-viewport');
+    viewport.getBoundingClientRect = () => ({ left: 0, top: 0, right: 800, bottom: 500, width: 800, height: 500 });
+    const card = id => view.contentEl.querySelector(`.obsb-core-node[data-node-id="${id}"]`);
+    const pointer = (target, type, x, y) => { const e = new dom.window.MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 }); Object.defineProperties(e, { pointerId: { value: 9 }, pointerType: { value: 'mouse' } }); target.dispatchEvent(e); };
+    const drag = (from, to) => {
+      card(from).getBoundingClientRect = () => ({ left: 50, top: 100, right: 150, bottom: 124, width: 100, height: 24 });
+      card(to).getBoundingClientRect = () => ({ left: 300, top: 100, right: 400, bottom: 124, width: 100, height: 24 });
+      document.elementFromPoint = () => card(to);
+      pointer(card(from), 'pointerdown', 60, 110); pointer(document, 'pointermove', 320, 110);
+    };
+    drag(area.id, child.id); assert.match(viewport.querySelector('.obsb-map-drag-status').textContent, /自身或自己的子树/);
+    pointer(document, 'pointerup', 320, 110); await tick(); assert.deepEqual(await plugin.store.load(), before);
+    drag(area.id, task.id); assert.match(viewport.querySelector('.obsb-map-drag-status').textContent, /任务下不能放领域/);
+    pointer(document, 'pointerup', 320, 110); await tick(); assert.deepEqual(await plugin.store.load(), before);
+    drag(task.id, area.id); assert.match(viewport.querySelector('.obsb-map-drag-status').textContent, /作为子节点/);
+    assert.deepEqual(await plugin.store.load(), before);
+    pointer(document, 'pointerup', 320, 110); await tick();
+    assert.equal((await plugin.store.load()).nodes.find(n => n.id === task.id).parent, area.id);
+    await view.undo(); assert.deepEqual((await plugin.store.load()).nodes, before.nodes);
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
 test('archive nodes remain read-only and cannot be changed through diagram shortcuts', async () => {
   const { view, plugin } = await setup();
   await view.archive(); const confirm = Modal.opened.at(-1); find(confirm.contentEl, '确认').click(); await tick();
