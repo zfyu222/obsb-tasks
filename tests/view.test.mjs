@@ -405,19 +405,85 @@ test('input shortcuts, IME selection, modifiers and key repeats do not create ac
   key(inline, 'Escape'); await tick();
   await view.onClose(); view.contentEl.remove();
 });
-test('invalid type conversion is rejected and pending draft is not lost by switching selection', async () => {
+test('invalid type conversion restores original kind and permits navigation without repeated errors or losing text', async () => {
   const { view, plugin, area } = await setup();
   find(view.contentEl, '○ 任务1').click(); await tick();
   const task = view.board.nodes.find(n => n.title === '任务1');
   // Move below a task, then attempt a forbidden area conversion.
   const parent = field(view, 'parent'); inputValue(parent, view.board.nodes.find(n => n.title === '任务2').id); await tick();
+  inputValue(field(view, 'title'), '保留未保存名称', false);
   inputValue(field(view, 'kind'), 'area'); await tick();
   assert.match(view.contentEl.querySelector('.obsb-task-properties').textContent, /任务下不能挂领域/);
   assert.equal((await plugin.store.load()).nodes.find(n => n.id === task.id).kind, 'task');
-  await assert.rejects(view.locate(area.id), /任务下不能挂领域/);
-  assert.equal(field(view, 'kind').value, 'area'); // Failed selection flush keeps the same draft visible.
-  inputValue(field(view, 'kind'), 'task'); await tick();
+  assert.equal(field(view, 'kind').value, 'task'); assert.equal(field(view, 'title').value, '保留未保存名称');
+  const notices = Notice.messages.length;
+  await view.locate(area.id); assert.equal(field(view, 'title').value, area.title);
+  assert.equal((await plugin.store.load()).nodes.find(n => n.id === task.id).title, '保留未保存名称');
+  find(view.contentEl, '切换列表').click(); await tick(); find(view.contentEl, '切换导图').click(); await tick();
+  assert.equal(Notice.messages.length, notices);
   await view.onClose(); view.contentEl.remove();
+});
+
+test('multi-selected parent and child convert together atomically and undo/redo as one operation', async () => {
+  const { view, plugin } = await setup();
+  try {
+    const parent = view.board.nodes.find(n => n.title === '任务1'), child = view.board.nodes.find(n => n.title === '任务2');
+    await view.move([child.id], parent.id, 'child');
+    await view.selectMany([child.id, parent.id], child.id);
+    assert.match(view.contentEl.textContent, /已选中 2 个节点/);
+    const before = await plugin.store.load(); inputValue(field(view, 'kind'), 'area'); await tick();
+    let saved = await plugin.store.load();
+    assert.equal(saved.nodes.find(n => n.id === parent.id).kind, 'area'); assert.equal(saved.nodes.find(n => n.id === child.id).kind, 'area');
+    assert.equal(saved.nodes.find(n => n.id === child.id).parent, parent.id);
+    assert.equal(saved.nodes.find(n => n.id === child.id).notes, before.nodes.find(n => n.id === child.id).notes);
+    assert.equal(view.selectedIds.size, 2);
+    key(view.contentEl.querySelector('.obsb-task-stage'), 'z', { ctrlKey: true }); await tick();
+    saved = await plugin.store.load(); assert.equal(saved.nodes.find(n => n.id === parent.id).kind, 'task'); assert.equal(saved.nodes.find(n => n.id === child.id).kind, 'task');
+    key(view.contentEl.querySelector('.obsb-task-stage'), 'y', { ctrlKey: true }); await tick();
+    saved = await plugin.store.load(); assert.equal(saved.nodes.find(n => n.id === parent.id).kind, 'area'); assert.equal(saved.nodes.find(n => n.id === child.id).kind, 'area');
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
+
+test('invalid mixed multi-conversion changes nothing and leaves other nodes and toolbar usable', async () => {
+  const { view, plugin, area } = await setup();
+  try {
+    const parent = view.board.nodes.find(n => n.title === '任务1'), child = view.board.nodes.find(n => n.title === '任务2');
+    await view.move([child.id], parent.id, 'child'); await view.selectMany([area.id, child.id], child.id);
+    const before = await plugin.store.load(); inputValue(field(view, 'kind'), 'area'); await tick();
+    assert.deepEqual(await plugin.store.load(), before); assert.equal(view.draft.dirty, false); assert.equal(field(view, 'kind').value, 'task');
+    assert.match(view.contentEl.textContent, /任务下不能挂领域/);
+    await view.select(parent.id); assert.equal(field(view, 'title').value, parent.title);
+    await view.select(null); assert.equal(view.selected, null);
+    find(view.contentEl, '+ 任务').click(); await tick(); assert.equal((await plugin.store.load()).nodes.length, before.nodes.length + 1);
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
+
+test('batch conversion disk failure leaves all types unchanged and permits leaving the unmodified draft', async () => {
+  const { view, plugin } = await setup();
+  try {
+    const ids = view.board.nodes.map(n => n.id); await view.selectMany(ids, ids[1]);
+    const before = await plugin.store.load(), change = plugin.store.change.bind(plugin.store);
+    plugin.store.change = () => Promise.reject(new Error('模拟类型批量写入失败'));
+    inputValue(field(view, 'kind'), 'area'); await tick();
+    assert.deepEqual(await plugin.store.load(), before); assert.equal(view.draft.dirty, false); assert.equal(field(view, 'kind').value, 'task');
+    assert.match(view.contentEl.textContent, /模拟类型批量写入失败/);
+    plugin.store.change = change; await view.select(null); assert.equal(view.selected, null);
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
+
+test('invalid parent/status dropdown edits do not poison the draft or block selection', async () => {
+  const { view, plugin, area } = await setup();
+  try {
+    const parent = view.board.nodes.find(n => n.title === '任务1'), child = view.board.nodes.find(n => n.title === '任务2');
+    await view.move([child.id], parent.id, 'child'); await view.select(child.id);
+    inputValue(field(view, 'status'), 'todo'); await tick(); await view.select(parent.id);
+    inputValue(field(view, 'status'), 'done'); await tick();
+    assert.equal(field(view, 'status').value, 'todo'); assert.equal(view.draft.dirty, false);
+    await view.select(area.id); inputValue(field(view, 'parent'), parent.id); await tick();
+    assert.equal(field(view, 'parent').value, ''); assert.equal(view.draft.dirty, false);
+    await view.select(child.id); assert.equal(field(view, 'title').value, child.title);
+    assert.equal((await plugin.store.load()).nodes.find(n => n.id === parent.id).status, 'todo');
+  } finally { await view.onClose(); view.contentEl.remove(); }
 });
 test('selection flushes unblurred text, while external edits block save without overwriting', async () => {
   const { view, plugin, data } = await setup();

@@ -102,6 +102,22 @@ export function upsert(board: Board, node: TaskNode, afterId?: string): Board {
   else nodes.push(next);
   const result: Board = { ...board, revision: uid(), nodes }; validate(result); return result;
 }
+export function changeKinds(board: Board, ids: string[], kind: Kind): Board {
+  const selected = new Set(ids), before = validate(board), time = now();
+  if (!selected.size || [...selected].some(id => !before.byId.has(id))) throw new Error('选中节点已变化，请重新选择');
+  const nodes = board.nodes.map(n => selected.has(n.id) ? { ...n, kind, updated: time,
+    completed: kind === 'task' ? n.status === 'done' ? n.completed || time : '' : n.completed } : n);
+  const next = { ...board, revision: uid(), nodes }, tree = validate(next);
+  // Validate the final graph together, rather than rejecting a temporary
+  // task-parent/area-child state halfway through a parent-child conversion.
+  const unfinished = new Set<string>();
+  for (let i = tree.order.length - 1; i >= 0; i--) {
+    const n = tree.order[i];
+    if (selected.has(n.id) && n.kind === 'task' && n.status === 'done' && unfinished.has(n.id)) throw new Error('还有未完成子任务，请先处理后再完成父任务');
+    if (n.parent && (unfinished.has(n.id) || n.kind === 'task' && n.status !== 'done')) unfinished.add(n.parent);
+  }
+  return next;
+}
 export function archivePlan(board: Board): { ids: Set<string>; skipped: number } {
   const tree = validate(board), eligible = new Set<string>(); let skipped = 0;
   for (let i = tree.order.length - 1; i >= 0; i--) {

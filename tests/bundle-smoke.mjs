@@ -79,5 +79,14 @@ assert.match(view.contentEl.querySelector('.obsb-map-drag-status').textContent, 
 assert.equal((await plugin.store.load()).nodes.find(n => n.id === moving.id).parent, moving.parent);
 pointer(document, 'pointerup', 220, 110); await tick(); assert.equal((await plugin.store.load()).nodes.find(n => n.id === moving.id).parent, null);
 press(stage(), 'z', { ctrlKey: true }); await tick(); assert.equal((await plugin.store.load()).nodes.find(n => n.id === moving.id).parent, moving.parent);
+await view.selectMany([moving.id], moving.id);
+const kindControl = view.contentEl.querySelector('[data-field=kind]'); kindControl.value = 'area'; kindControl.dispatchEvent(new dom.window.Event('change')); await tick();
+assert.equal(kindControl.value, 'task'); assert.match(view.contentEl.textContent, /任务下不能挂领域/);
+await view.select(null); assert.equal(view.selected, null);
+const batchIds = (await plugin.store.load()).nodes.map(n => n.id);
+await view.selectMany(batchIds, moving.id);
+const batchKind = view.contentEl.querySelector('[data-field=kind]'); batchKind.value = 'area'; batchKind.dispatchEvent(new dom.window.Event('change')); await tick();
+assert.ok((await plugin.store.load()).nodes.every(n => n.kind === 'area'));
+press(stage(), 'z', { ctrlKey: true }); await tick(); assert.ok((await plugin.store.load()).nodes.every(n => n.kind === 'task'));
 await view.onClose();
 console.log('Production bundle: drag preview/drop/undo, inline editor exit, round toggles and safe Markdown migration passed');

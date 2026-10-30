@@ -1,7 +1,7 @@
 import { Component, ItemView, MarkdownRenderer, Notice, WorkspaceLeaf } from 'obsidian';
 import TaskPlugin, { button, ConfirmModal, el, IMPORTANCE, report, STATUS } from './main';
 import { inspector, NodeDraft } from './inspector';
-import { archivePlan, Board, Kind, newNode, periodNodes, sleepPlan, TaskNode, Tree, upsert, moveTasks, deleteTasks } from './model';
+import { archivePlan, Board, Kind, newNode, periodNodes, sleepPlan, TaskNode, Tree, upsert, moveTasks, deleteTasks, changeKinds } from './model';
 import { CURRENT, SavedBatch } from './store';
 import { GraphCanvas } from './graph-canvas';
 import { GRAPH_ROOT, GraphGeometry, GraphNode, layoutGraph } from './graph-layout';
@@ -504,6 +504,7 @@ export class TaskView extends ItemView {
     const n = this.selected ? this.tree.byId.get(this.selected) : undefined;
     if (!n) { el(this.panel, 'h3', 'root'); el(this.panel, 'p', '选中 root 按 Tab 或 Enter 直接添加任务。选中节点后，在这里修改属性；改动选项或离开输入框自动保存。'); return; }
     el(this.panel, 'h3', this.source === 'current' ? '节点属性' : n.title);
+    if (this.source === 'current' && this.selectedIds.size > 1) el(this.panel, 'p', `已选中 ${this.selectedIds.size} 个节点：节点类型应用于全部选中节点，其他属性仅编辑当前节点。`);
     if (this.source !== 'current') {
       el(this.panel, 'p', n.kind === 'area' ? '领域（只读）' : `${STATUS[n.status]} · 重要程度：${IMPORTANCE[n.importance]}（只读）`);
       if (n.kind === 'task') el(this.panel, 'p', `截止：${n.deadline || '未设置'}\n计划：${n.planned || '未设置'}\n预计：${n.estimate / 60}h · 实际：${n.actual / 60}h\n完成：${n.completed ? new Date(n.completed).toLocaleString() : '未完成'}`);
@@ -530,11 +531,28 @@ export class TaskView extends ItemView {
           else { this.graph.setGeometry(this.geometry(this.matches())); this.updateVisibleNode(next.nodes.find(node => node.id === draft.id)!); }
         }
         return next;
+      }, (candidate, patch) => {
+        if ('kind' in patch || 'parent' in patch || 'status' in patch) {
+          const saved = this.tree.byId.get(candidate.id)!;
+          upsert(this.board, { ...saved, kind: candidate.kind, parent: candidate.parent, status: candidate.status, completed: candidate.completed });
+        }
       });
+      const draft = this.draft;
       inspector(this.panel, this.draft, this.board, renderNotes, () => {
         new ConfirmModal(this.plugin, '重新加载文件', '放弃当前节点未保存的修改。需要保留时，请先使用“复制未保存内容”。', async () => {
           this.draft = undefined; this.inlineId = null; await this.reload();
         }).open();
+      }, kind => {
+        const ids = [...this.selectedIds];
+        return this.run(async () => {
+          if (this.draft !== draft) return;
+          // Check before flushing: a rejected conversion must not poison the
+          // draft or prevent saving unrelated name/notes edits and navigating.
+          changeKinds(this.board, ids, kind);
+          await this.finishTitle();
+          await this.commit(board => changeKinds(board, ids, kind));
+          if (!this.closed) { this.prepare(); this.draw(); await this.detail(); }
+        });
       });
       el(this.panel, 'h4', '注释预览'); this.panel.append(body);
     } else {

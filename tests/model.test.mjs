@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
-import { archivePlan, emptyBoard, extract, newNode, periodNodes, restore, sleepPlan, Tree, upsert, validate, validDate } from '../.test-build/model.mjs';
+import { archivePlan, changeKinds, emptyBoard, extract, newNode, periodNodes, restore, sleepPlan, Tree, upsert, validate, validDate } from '../.test-build/model.mjs';
 import { batchFrom, boardFrom, decode, encodeBatch, encodeBoard } from '../.test-build/codec.mjs';
 import { encodeBoard as legacyBoard, encodeBatch as legacyBatch } from '../.test-build/legacy-codec.mjs';
 const node = (kind = 'task', parent = null, done = false) => ({ ...newNode(kind, parent), title: '任务 [测试] ^ 标题', status: done ? 'done' : 'todo', completed: done ? new Date().toISOString() : '' });
@@ -156,4 +156,14 @@ test('area with subareas cannot become task, task below task cannot become area'
   assert.throws(() => upsert(board([area, subarea]), { ...area, kind: 'task' }), /任务下不能挂领域/);
   const parent = node(), child = node('task', parent.id);
   assert.throws(() => upsert(board([parent, child]), { ...child, kind: 'area' }), /任务下不能挂领域/);
+});
+
+test('batch kind conversion validates final hierarchy in either direction and never mutates rejected input', () => {
+  const parent = node(), child = node('task', parent.id), original = board([parent, child]), snapshot = structuredClone(original);
+  const areas = changeKinds(original, [child.id, parent.id], 'area');
+  assert.ok(areas.nodes.every(n => n.kind === 'area')); assert.deepEqual(original, snapshot);
+  const tasks = changeKinds(areas, [parent.id, child.id], 'task'); assert.ok(tasks.nodes.every(n => n.kind === 'task'));
+  assert.throws(() => changeKinds(original, [child.id], 'area'), /任务下不能挂领域/);
+  assert.throws(() => changeKinds(areas, [parent.id], 'task'), /任务下不能挂领域/);
+  assert.deepEqual(original, snapshot); assert.equal(tasks.nodes[1].parent, parent.id); assert.equal(tasks.nodes[1].notes, child.notes);
 });

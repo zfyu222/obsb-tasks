@@ -11,12 +11,15 @@ export class NodeDraft {
   private composing = 0;
   private compositionWaiters: (() => void)[] = [];
   error = '';
+  rejected = false;
   busy = false;
   changed: () => void = () => {};
   constructor(node: TaskNode, public revision: string,
-    private write: (node: TaskNode, revision: string) => Promise<Board>) { this.value = structuredClone(node); }
+    private write: (node: TaskNode, revision: string) => Promise<Board>,
+    private check?: (node: TaskNode, patch: Partial<TaskNode>) => void) { this.value = structuredClone(node); }
   get dirty(): boolean { return this.saved !== this.generation; }
-  patch(patch: Partial<TaskNode>): void { Object.assign(this.value, patch); this.generation++; this.error = ''; this.changed(); }
+  patch(patch: Partial<TaskNode>): void { this.check?.({ ...this.value, ...patch }, patch); Object.assign(this.value, patch); this.generation++; this.error = ''; this.rejected = false; this.changed(); }
+  reject(error: unknown): void { this.error = error instanceof Error ? error.message : String(error); this.rejected = true; this.changed(); }
   composition(start: boolean): void {
     this.composing += start ? 1 : -1; this.composing = Math.max(0, this.composing);
     if (!this.composing) for (const resolve of this.compositionWaiters.splice(0)) resolve();
@@ -26,7 +29,7 @@ export class NodeDraft {
     if (this.pending) { await this.pending; if (this.dirty) await this.flush(); return; }
     if (!this.dirty) return;
     const run = async (): Promise<void> => {
-      this.busy = true; this.error = ''; this.changed();
+      this.busy = true; this.error = ''; this.rejected = false; this.changed();
       try {
         while (this.dirty) {
           const version = this.generation, submitted = structuredClone(this.value);
@@ -62,7 +65,7 @@ function completionInstant(local: string): string {
 function append<K extends keyof HTMLElementTagNameMap>(parent: HTMLElement, tag: K, text = ''): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag); e.textContent = text; parent.append(e); return e;
 }
-export function inspector(parent: HTMLElement, draft: NodeDraft, board: Board, preview: () => void, discard: () => void): void {
+export function inspector(parent: HTMLElement, draft: NodeDraft, board: Board, preview: () => void, discard: () => void, changeKind?: (kind: TaskNode['kind']) => Promise<void>): void {
   const form = append(parent, 'form'); form.className = 'obsb-task-properties';
   form.addEventListener('submit', e => { e.preventDefault(); void draft.flush().catch(() => {}); });
   const fields = new Map<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>();
@@ -74,15 +77,24 @@ export function inspector(parent: HTMLElement, draft: NodeDraft, board: Board, p
     input.addEventListener('compositionstart', () => draft.composition(true));
     input.addEventListener('compositionend', () => draft.composition(false)); return input;
   };
-  const select = (container: HTMLElement, name: string, key: string, values: Record<string, string>, change: (v: string) => void): HTMLSelectElement => {
+  const select = (container: HTMLElement, name: string, key: string, values: Record<string, string>, change: (v: string) => void | Promise<void>): HTMLSelectElement => {
     const label = append(container, 'label', name), input = append(label, 'select'); input.dataset.field = key; input.setAttribute('aria-label', name);
     fields.set(key, input);
     for (const [value, title] of Object.entries(values)) { const option = append(input, 'option', title); option.value = value; }
     input.value = String(draft.value[key]);
-    input.addEventListener('change', () => { change(input.value); void draft.flush().catch(() => {}); }); return input;
+    input.addEventListener('change', () => {
+      void (async () => {
+        const controls = key === 'kind' ? [...form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement>('input,select,textarea,button')] : [];
+        const disabled = controls.map(control => control.disabled);
+        controls.forEach(control => { control.disabled = true; });
+        try { await change(input.value); await draft.flush(); }
+        catch (error) { if (!draft.error) draft.reject(error); input.value = String(draft.value[key]); }
+        finally { controls.forEach((control, i) => { control.disabled = disabled[i]; }); }
+      })();
+    }); return input;
   };
   text(form, '名称', 'title', draft.value.title, title => draft.patch({ title })).required = true;
-  select(form, '节点类型', 'kind', { task: '任务', area: '领域' }, kind => draft.patch({ kind: kind as TaskNode['kind'] }));
+  select(form, '节点类型', 'kind', { task: '任务', area: '领域' }, kind => changeKind ? changeKind(kind as TaskNode['kind']) : draft.patch({ kind: kind as TaskNode['kind'] }));
   const taskFields = append(form, 'div');
   select(taskFields, '状态', 'status', statuses, status => draft.patch({ status: status as TaskNode['status'] }));
   select(taskFields, '重要程度', 'importance', importance, value => draft.patch({ importance: value as TaskNode['importance'] }));
@@ -127,8 +139,9 @@ export function inspector(parent: HTMLElement, draft: NodeDraft, board: Board, p
   let lastKind = draft.value.kind;
   draft.changed = () => {
     taskFields.hidden = draft.value.kind !== 'task';
-    state.textContent = draft.busy ? '保存中…' : draft.error ? '保存失败，草稿仍保留；可修正或复制后重新加载' : draft.dirty ? '修改后离开输入框自动保存' : '已保存';
+    state.textContent = draft.busy ? '保存中…' : draft.rejected ? '此次修改未应用，可以继续操作；其他未保存内容仍保留' : draft.error ? '保存失败，草稿仍保留；可修正或复制后重新加载' : draft.dirty ? '修改后离开输入框自动保存' : '已保存';
     error.textContent = draft.error; retry.hidden = copy.hidden = reload.hidden = !draft.error;
+    if (draft.rejected) retry.hidden = !draft.dirty;
     // Preserve focus/caret while normalizing auto-generated completion timestamps.
     for (const [key, input] of fields) if (document.activeElement !== input) {
       const value = draft.value[key]; input.value = key === 'completed' ? localDateTime(draft.value.completed) : key === 'tags' ? draft.value.tags.join(', ') : key === 'estimate' || key === 'actual' ? String(Number(value) / 60) : String(value);
