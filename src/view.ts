@@ -10,6 +10,16 @@ import { TaskHistory } from './task-history';
 
 type Source = 'current' | 'archive' | 'sleep' | 'period';
 const ROW = 56;
+const URGENT_DAYS = 7;
+const DAY_MS = 86400000;
+const localDate = (): string => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+// 临近截止的边框由浅红渐变到深红；已完成和已取消的任务不再提示。
+function urgencyAlpha(node: TaskNode): number {
+  if (node.kind !== 'task' || !node.deadline || node.status === 'done' || node.status === 'cancelled') return 0;
+  const days = (Date.parse(`${node.deadline}T00:00:00Z`) - Date.parse(`${localDate()}T00:00:00Z`)) / DAY_MS;
+  if (!Number.isFinite(days) || days > URGENT_DAYS) return 0;
+  return 0.2 + 0.8 * (1 - Math.max(days, 0) / URGENT_DAYS);
+}
 export class TaskView extends ItemView {
   ready: Promise<void> = Promise.resolve();
   board!: Board;
@@ -149,6 +159,9 @@ export class TaskView extends ItemView {
   private mapAppearance(card: HTMLElement, node: TaskNode): void {
     if (node.kind === 'task') card.dataset.importance = node.importance;
     else delete card.dataset.importance;
+    const urgent = urgencyAlpha(node).toFixed(2);
+    if (urgent === '0.00') card.style.removeProperty('--task-urgency-alpha');
+    else card.style.setProperty('--task-urgency-alpha', urgent);
     card.dataset.status = node.status;
     const title = card.querySelector('[data-map-title]');
     title?.setAttribute('aria-label', (node.kind === 'task' ? node.status === 'done' ? '✓ ' : '○ ' : '') + node.title);

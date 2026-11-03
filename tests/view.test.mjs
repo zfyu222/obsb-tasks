@@ -291,6 +291,23 @@ test('compact title-only map keeps priority, status and tooltip synchronized thr
   } finally { await view.onClose(); view.contentEl.remove(); }
 });
 
+test('deadline proximity drives the urgency border from faint to deepest red and clears on completion', async () => {
+  const { view } = await setup();
+  const day = offset => { const d = new Date(); d.setDate(d.getDate() + offset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  try {
+    find(view.contentEl, '○ 任务1').click(); await tick();
+    const id = view.board.nodes.find(n => n.title === '任务1').id;
+    const alpha = () => view.contentEl.querySelector(`.obsb-core-node[data-node-id="${id}"]`).style.getPropertyValue('--task-urgency-alpha');
+    assert.equal(alpha(), '');
+    inputValue(field(view, 'deadline'), day(30)); await tick(); assert.equal(alpha(), '');
+    inputValue(field(view, 'deadline'), day(3)); await tick(); assert.equal(alpha(), '0.66');
+    inputValue(field(view, 'deadline'), day(0)); await tick(); assert.equal(alpha(), '1.00');
+    inputValue(field(view, 'deadline'), day(-1)); await tick(); assert.equal(alpha(), '1.00');
+    inputValue(field(view, 'status'), 'done'); await tick(); assert.equal(alpha(), '');
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
+
 test('node completion button completes and reopens with timestamps, native activation and undo/redo', async () => {
   const { view, plugin } = await setup();
   try {
