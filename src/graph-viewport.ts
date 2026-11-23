@@ -68,6 +68,8 @@ export class GraphViewport {
     }
     const card = target.closest<HTMLElement>('[data-node-id]'), id = card?.dataset.nodeId;
     const pan = e.button === 2 || e.button === 1 || this.panMode || e.pointerType === 'touch';
+    // Text owns ordinary mouse drags; the surrounding card still moves nodes.
+    if (!pan && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && target.closest('[data-map-title]')) return;
     if (!pan && e.button !== 0) return;
     if (!pan && this.readonly && !card) return;
     this.element.tabIndex = -1; this.element.focus({ preventScroll: true });
@@ -180,6 +182,7 @@ export class GraphViewport {
   private doubleClick: EventListener = event => {
     if (this.readonly) return;
     const e = event as MouseEvent, target = e.target as HTMLElement;
+    if (target.closest('[data-map-title]')) return;
     if (target.closest('input,textarea,button:not([data-map-title]),[contenteditable="true"]')) return;
     const card = target.closest<HTMLElement>('[data-node-id]') ?? this.element.ownerDocument.elementFromPoint?.(e.clientX, e.clientY)?.closest<HTMLElement>('[data-node-id]');
     if (!card?.dataset.nodeId || !this.element.contains(card)) return;

@@ -175,6 +175,14 @@ export function periodNodes(nodes: TaskNode[], field: 'created' | 'completed', s
   return new Set(nodes.filter(n => n.kind === 'task' && n[field] &&
     (!start || localDay(n[field]) >= start) && (!end || localDay(n[field]) <= end)).map(n => n.id));
 }
+export function calendarRange(preset: 'lastWeek' | 'thisWeek' | 'today', now = new Date()): { start: string; end: string } {
+  // Local calendar arithmetic keeps Monday–Sunday intact across DST changes.
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
+  if (preset !== 'today') start.setDate(start.getDate() - (start.getDay() + 6) % 7 - (preset === 'lastWeek' ? 7 : 0));
+  const end = new Date(start);
+  if (preset !== 'today') end.setDate(end.getDate() + 6);
+  return { start: localDay(start.toISOString()), end: localDay(end.toISOString()) };
+}
 export function localDay(value: string): string {
   const d = new Date(value);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

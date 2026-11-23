@@ -1,14 +1,14 @@
 import { Component, ItemView, MarkdownRenderer, Notice, WorkspaceLeaf } from 'obsidian';
 import TaskPlugin, { button, ConfirmModal, el, IMPORTANCE, report, STATUS } from './main';
 import { inspector, NodeDraft } from './inspector';
-import { archivePlan, Board, Kind, newNode, periodNodes, sleepPlan, TaskNode, Tree, upsert, moveTasks, deleteTasks, changeKinds } from './model';
+import { archivePlan, Board, Kind, newNode, periodNodes, calendarRange, sleepPlan, TaskNode, Tree, upsert, moveTasks, deleteTasks, changeKinds } from './model';
 import { CURRENT, SavedBatch } from './store';
 import { GraphCanvas } from './graph-canvas';
 import { GRAPH_ROOT, GraphGeometry, GraphNode, layoutGraph } from './graph-layout';
 import { Camera } from './graph-viewport';
 import { TaskHistory } from './task-history';
 
-type Source = 'current' | 'archive' | 'sleep' | 'period';
+type Source = 'current' | 'archive' | 'sleep';
 const ROW = 56;
 const URGENT_DAYS = 7;
 const DAY_MS = 86400000;
@@ -28,7 +28,6 @@ export class TaskView extends ItemView {
   private selected: string | null = null;
   private collapsed = new Set<string>();
   private query = ''; private status = ''; private sorting = 'manual';
-  private periodField: 'created' | 'completed' = 'completed';
   private start = ''; private end = '';
   private batches: SavedBatch[] = [];
   private nodes: TaskNode[] = []; private tree = new Tree([]);
@@ -179,6 +178,11 @@ export class TaskView extends ItemView {
     card.title = node.title + (node.kind === 'task' ? `\n${STATUS[node.status]} · 重要程度：${IMPORTANCE[node.importance]}${node.deadline ? ` · 截止：${node.deadline}` : ''}` : '\n领域') + (node.notes ? '\n有注释，选中后在右侧查看' : '');
   }
   private diagramKey(event: KeyboardEvent): void {
+    const selection = this.contentEl.ownerDocument.getSelection();
+    if (selection && !selection.isCollapsed && selection.anchorNode && this.stage?.contains(selection.anchorNode)) {
+      // Let the browser copy/navigate selected text without invoking graph commands.
+      event.stopPropagation(); return;
+    }
     if (this.source !== 'current' || this.mode !== 'map' || event.isComposing || event.keyCode === 229) return;
     if ((event.ctrlKey || event.metaKey) && !event.altKey && ['z', 'y'].includes(event.key.toLowerCase())) {
       event.preventDefault(); event.stopPropagation(); if (!event.repeat) void this.run(() => this.undo(event.key.toLowerCase() === 'y' || event.shiftKey)).catch(report); return;
@@ -210,7 +214,7 @@ export class TaskView extends ItemView {
     await this.commit(b => upsert(b, node, afterId));
     this.selected = node.id; this.selectedIds = new Set([node.id]); this.inlineId = null; this.revealNext = true;
     // The newly created node must remain visible even when the old query would hide it.
-    this.query = ''; this.status = ''; this.mode = 'map';
+    this.query = ''; this.status = ''; this.start = ''; this.end = ''; this.mode = 'map';
     this.prepare(); for (const ancestor of this.tree.ancestors(node.id)) this.collapsed.delete(ancestor.id);
     this.render(); await this.beginTitle();
   }
@@ -268,7 +272,7 @@ export class TaskView extends ItemView {
     try {
       this.board = await this.plugin.store.load(); this.dirty = false;
       this.history.clear();
-      this.batches = this.source === 'current' ? [] : await this.plugin.store.batches(this.source === 'sleep' ? 'sleep' : this.source === 'archive' ? 'archive' : undefined);
+      this.batches = this.source === 'current' ? [] : await this.plugin.store.batches(this.source);
       this.prepare(); this.render();
     } catch (e) {
       this.contentEl.replaceChildren(); el(this.contentEl, 'p', '任务文件无法加载，未覆盖任何内容。', 'obsb-task-error');
@@ -280,7 +284,7 @@ export class TaskView extends ItemView {
   private prepare(): void {
     const currentIds = new Set(this.board.nodes.map(n => n.id));
     const merged = new Map<string, TaskNode>(); this.paths.clear(); this.contexts.clear();
-    if (this.source === 'current' || this.source === 'period') {
+    if (this.source === 'current') {
       for (const n of this.board.nodes) { merged.set(n.id, n); this.paths.set(n.id, CURRENT); }
     }
     // Latest explicit archive data wins over older context snapshots; current nodes always win.
@@ -289,11 +293,11 @@ export class TaskView extends ItemView {
       for (const n of saved.batch.context) if (!merged.has(n.id)) { merged.set(n.id, n); this.contexts.add(n.id); this.paths.set(n.id, saved.path); }
     }
     for (const saved of this.batches) for (const n of saved.batch.nodes) {
-      if (this.source !== 'period' && currentIds.has(n.id)) continue;
-      if (!currentIds.has(n.id) || !merged.has(n.id)) { merged.set(n.id, n); this.paths.set(n.id, saved.path); }
+      if (currentIds.has(n.id)) continue;
+      merged.set(n.id, n); this.paths.set(n.id, saved.path);
       actual.add(n.id); this.contexts.delete(n.id);
     }
-    if (this.source !== 'current' && this.source !== 'period') {
+    if (this.source !== 'current') {
       const keep = new Set(actual);
       for (const id of actual) {
         let n = merged.get(id); const seen = new Set<string>();
@@ -311,7 +315,7 @@ export class TaskView extends ItemView {
     this.markdown?.unload(); this.detailEpoch++; this.renderEpoch++;
     this.contentEl.replaceChildren(); this.contentEl.classList.add('obsb-tasks');
     const bar = el(this.contentEl, 'div', '', 'obsb-task-toolbar');
-    for (const [value, name] of [['current', '当前'], ['archive', '任务归档'], ['sleep', '休眠领域'], ['period', '时间回顾']] as const) {
+    for (const [value, name] of [['current', '当前'], ['archive', '任务归档'], ['sleep', '休眠领域']] as const) {
       const b = button(bar, name, () => this.run(async () => { await this.flush(); this.draft = undefined; this.inlineId = null; this.source = value; this.selected = null; this.selectedIds.clear(); this.focusId = undefined; this.camera.initialized = false; await this.reload(); }));
       b.classList.toggle('is-active', this.source === value);
     }
@@ -339,16 +343,25 @@ export class TaskView extends ItemView {
     const sort = el(filters, 'select'); sort.setAttribute('aria-label', '列表排序');
     for (const [value, title] of [['manual', '原顺序'], ['deadline', '截止日期'], ['importance', '重要程度']]) { const o = el(sort, 'option', title); o.value = value; }
     sort.value = this.sorting; sort.addEventListener('change', () => { this.sorting = sort.value; this.draw(); });
-    if (this.source === 'period') {
-      const field = el(filters, 'select'); field.setAttribute('aria-label', '时间口径');
-      for (const [value, title] of [['completed', '按完成时间'], ['created', '按创建时间']]) { const o = el(field, 'option', title); o.value = value; }
-      field.value = this.periodField; field.addEventListener('change', () => { this.periodField = field.value as typeof this.periodField; this.draw(); });
-      for (const [key, title] of [['start', '开始日期'], ['end', '结束日期']] as const) {
-        const input = el(filters, 'input'); input.type = 'date'; input.setAttribute('aria-label', title); input.value = this[key];
-        input.addEventListener('change', () => { this[key] = input.value; this.draw(); });
-      }
-      el(this.contentEl, 'p', '按日期筛选，补充祖先上下文；不是当时状态回放。当前节点优先，其余采用最近归档记录。', 'obsb-task-hint');
+    const dates = el(this.contentEl, 'div', '', 'obsb-task-toolbar');
+    el(dates, 'span', '完成日期');
+    const dateInput = (key: 'start' | 'end', title: string) => {
+      const input = el(dates, 'input');
+      input.type = 'date'; input.setAttribute('aria-label', title); input.value = this[key];
+      input.addEventListener('change', () => { this[key] = input.value; this.draw(); });
+      return input;
+    };
+    const start = dateInput('start', '完成开始日期');
+    el(dates, 'span', '至');
+    const end = dateInput('end', '完成结束日期');
+    for (const [preset, title] of [['lastWeek', '上周'], ['thisWeek', '本周'], ['today', '今天']] as const) {
+      const quick = button(dates, title, () => {
+        const range = calendarRange(preset);
+        start.value = this.start = range.start; end.value = this.end = range.end; this.draw();
+      });
+      quick.title = preset === 'today' ? '按本机日期筛选今天' : '按本机日期筛选自然周（周一至周日）';
     }
+    button(dates, '清除日期', () => { start.value = this.start = ''; end.value = this.end = ''; this.draw(); });
     this.statusEl = el(this.contentEl, 'div', '', 'obsb-task-hint');
     const body = el(this.contentEl, 'div', '', 'obsb-task-body');
     this.stage = el(body, 'div', '', 'obsb-task-stage'); this.panel = el(body, 'aside', '', 'obsb-task-detail');
@@ -358,7 +371,8 @@ export class TaskView extends ItemView {
   }
   private matches(): Set<string> {
     const q = this.query.toLocaleLowerCase().trim();
-    const period = this.source === 'period' ? periodNodes(this.nodes, this.periodField, this.start, this.end) : undefined;
+    if (this.start && this.end && this.start > this.end) return new Set();
+    const period = this.start || this.end ? periodNodes(this.nodes, 'completed', this.start, this.end) : undefined;
     return new Set(this.nodes.filter(n => !this.contexts.has(n.id) && (!q || this.textIndex.get(n.id)?.includes(q)) &&
       (!this.status || n.kind === 'task' && n.status === this.status) && (!period || period.has(n.id))).map(n => n.id));
   }
@@ -372,10 +386,14 @@ export class TaskView extends ItemView {
     try {
       const matches = this.matches();
       this.statusEl.textContent = `${this.source === 'current' ? '当前' : '查询'}：${[...matches].filter(id => this.tree.byId.get(id)?.kind === 'task').length} 个任务 · ${this.source === 'current' ? '归档和休眠不参与当前流程' : '只读；恢复操作会写入当前文件'}`;
+      if (this.start && this.end && this.start > this.end) this.statusEl.textContent = '日期范围无效，完成开始日期不能晚于结束日期';
       if (this.mode === 'list') this.list(matches, epoch); else this.map(matches, epoch);
       this.markSelected();
       if (caret) { const input = this.stage.querySelector<HTMLInputElement>('.obsb-task-inline-title'); input?.focus({ preventScroll: true }); input?.setSelectionRange(caret[0], caret[1]); }
-    } catch (e) { el(this.stage, 'p', e instanceof Error ? e.message : String(e), 'obsb-task-error'); }
+    } catch (e) {
+      this.statusEl.textContent = '';
+      el(this.stage, 'p', e instanceof Error ? e.message : String(e), 'obsb-task-error');
+    }
   }
   private list(matches: Set<string>, epoch: number): void {
     const rows = this.tree.order.filter(n => n.kind === 'task' && matches.has(n.id));
@@ -423,7 +441,7 @@ export class TaskView extends ItemView {
       const context = this.stage.ownerDocument.createElement('canvas').getContext('2d');
       if (context) { context.font = '13px ' + (getComputedStyle(this.stage).fontFamily || 'sans-serif'); this.measure = text => context.measureText(text).width; }
     }
-    const filtered = !!this.query || !!this.status || this.source === 'period';
+    const filtered = !!(this.query || this.status || this.start || this.end);
     const editing = this.inlineId && this.draft?.value.id === this.inlineId
       ? { id: this.inlineId, title: this.draft.value.title, maxWidth: Math.max(44, Math.min(800, (this.graph?.viewport.clientWidth || 840) / this.camera.scale - 40)) } : undefined;
     return layoutGraph(this.tree, include, filtered ? new Set() : this.collapsed, this.focusId, this.direction, this.measure, editing);
@@ -470,8 +488,8 @@ export class TaskView extends ItemView {
     tool('收起全部', '收起全部分支', () => this.run(async () => { await this.flush(); this.collapsed = new Set(this.nodes.map(n => n.id)); this.draw(); }));
     tool('展开全部', '展开全部分支', () => this.run(async () => { await this.flush(); this.collapsed.clear(); this.draw(); }));
     el(this.stage, 'div', this.source === 'current'
-      ? '右键拖动画布 · 左键框选 / 拖动节点 · Ctrl 滚轮缩放 · Tab 子任务 / Enter 同级 · Space 编辑'
-      : '右键平移 · Ctrl 滚轮缩放 · 历史视图只读', 'obsb-task-hint');
+      ? '拖选文字后 Ctrl/Cmd+C 复制 · 拖节点边缘移动 · 右键平移 · 空白框选 · Ctrl 滚轮缩放 · Tab 子任务 / Enter 同级 · F2 / Space 编辑'
+      : '拖选文字后 Ctrl/Cmd+C 复制 · 右键平移 · Ctrl 滚轮缩放 · 历史视图只读', 'obsb-task-hint');
     this.graph = new GraphCanvas(this.stage, this.geometry(matches), this.camera, {
       selected: () => this.selectedIds,
       select: (ids, primary) => { void this.run(() => this.selectMany(ids, primary)).catch(report); },
@@ -488,15 +506,16 @@ export class TaskView extends ItemView {
         if (n && !matches.has(n.id)) card.classList.add('context');
         if (n && this.inlineId === n.id) this.titleInput(card, n);
         else {
-          const title = el(card, 'button', n?.title ?? 'root');
-          title.type = 'button'; title.dataset.mapTitle = 'true';
+          const title = el(card, 'span', n?.title ?? 'root');
+          title.tabIndex = 0; title.setAttribute('role', 'button'); title.dataset.mapTitle = 'true';
           title.addEventListener('click', event => {
+            const selection = title.ownerDocument.getSelection();
+            if (selection && !selection.isCollapsed && selection.anchorNode && this.stage.contains(selection.anchorNode)) return;
             const id = n?.id;
             const ids = new Set(event.ctrlKey || event.metaKey || event.shiftKey ? this.selectedIds : []);
             if (id) { if (ids.has(id)) ids.delete(id); else ids.add(id); }
             void this.run(() => this.selectMany([...ids], id)).catch(report);
           });
-          if (n) title.addEventListener('dblclick', () => { void this.run(async () => { if (this.selected !== n.id) await this.select(n.id); await this.beginTitle(); }).catch(report); });
         }
         if (n) this.mapAppearance(card, n);
         const id = n?.id, count = this.tree.children.get(id ?? null)?.length ?? 0;
@@ -540,7 +559,7 @@ export class TaskView extends ItemView {
         this.board = next; this.dirty = false;
         if (!this.closed) {
           this.prepare();
-          if (previousParent !== draft.parent || !this.inlineId && (this.query || this.status) || !this.graph) { this.revealNext = true; this.draw(); }
+          if (previousParent !== draft.parent || !this.inlineId && (this.query || this.status || this.start || this.end) || !this.graph) { this.revealNext = true; this.draw(); }
           else { this.graph.setGeometry(this.geometry(this.matches())); this.updateVisibleNode(next.nodes.find(node => node.id === draft.id)!); }
         }
         return next;
@@ -631,7 +650,7 @@ export class TaskView extends ItemView {
       if (!saved) { new Notice('未找到该节点'); return; }
       this.source = saved.batch.kind === 'sleep' ? 'sleep' : 'archive'; await this.reload();
     }
-    this.selected = id; this.selectedIds = new Set([id]); this.revealNext = true; this.query = ''; this.status = '';
+    this.selected = id; this.selectedIds = new Set([id]); this.revealNext = true; this.query = ''; this.status = ''; this.start = ''; this.end = '';
     for (const ancestor of this.tree.ancestors(id)) this.collapsed.delete(ancestor.id);
     this.render(); await this.detail();
   }

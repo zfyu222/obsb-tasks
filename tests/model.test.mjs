@@ -1,11 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
-import { archivePlan, changeKinds, emptyBoard, extract, newNode, periodNodes, restore, sleepPlan, Tree, upsert, validate, validDate } from '../.test-build/model.mjs';
+import { archivePlan, calendarRange, changeKinds, emptyBoard, extract, newNode, periodNodes, restore, sleepPlan, Tree, upsert, validate, validDate } from '../.test-build/model.mjs';
 import { batchFrom, boardFrom, decode, encodeBatch, encodeBoard } from '../.test-build/codec.mjs';
 import { encodeBoard as legacyBoard, encodeBatch as legacyBatch } from '../.test-build/legacy-codec.mjs';
 const node = (kind = 'task', parent = null, done = false) => ({ ...newNode(kind, parent), title: '任务 [测试] ^ 标题', status: done ? 'done' : 'todo', completed: done ? new Date().toISOString() : '' });
 const board = nodes => ({ ...emptyBoard(), nodes });
+
+test('calendar shortcuts use local Monday–Sunday weeks across year, leap day and DST boundaries', () => {
+  for (const [date, lastStart, lastEnd, thisStart, thisEnd] of [
+    ['2026-11-23', '2026-11-16', '2026-11-22', '2026-11-23', '2026-11-29'],
+    ['2026-11-29', '2026-11-16', '2026-11-22', '2026-11-23', '2026-11-29'],
+    ['2027-01-01', '2026-12-21', '2026-12-27', '2026-12-28', '2027-01-03'],
+    ['2024-03-01', '2024-02-19', '2024-02-25', '2024-02-26', '2024-03-03'],
+    ['2026-03-08', '2026-02-23', '2026-03-01', '2026-03-02', '2026-03-08'],
+    ['2026-11-01', '2026-10-19', '2026-10-25', '2026-10-26', '2026-11-01'],
+  ]) {
+    const now = new Date(`${date}T00:30:00`), before = now.getTime();
+    assert.deepEqual(calendarRange('lastWeek', now), { start: lastStart, end: lastEnd });
+    assert.deepEqual(calendarRange('thisWeek', now), { start: thisStart, end: thisEnd });
+    assert.deepEqual(calendarRange('today', now), { start: date, end: date });
+    assert.equal(now.getTime(), before);
+  }
+});
 
 test('root accepts tasks and nested areas; tasks reject area children and cycles', () => {
   const area = node('area'), task = node('task'), child = node('task', task.id), nested = node('area', area.id);

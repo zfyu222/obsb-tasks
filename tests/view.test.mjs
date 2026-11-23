@@ -5,7 +5,7 @@ import { TaskView, Modal, Notice, MarkdownRenderer, NodeDraft, newNode, emptyBoa
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { pretendToBeVisual: true });
 Object.assign(globalThis, { window: dom.window, document: dom.window.document, requestAnimationFrame: dom.window.requestAnimationFrame.bind(dom.window), cancelAnimationFrame: dom.window.cancelAnimationFrame.bind(dom.window) });
 const tick = () => new Promise(resolve => setTimeout(resolve, 25));
-const find = (root, label) => [...root.querySelectorAll('button')].find(b => b.textContent === label || b.hasAttribute('data-map-title') && b.getAttribute('aria-label') === label);
+const find = (root, label) => [...root.querySelectorAll('button,[data-map-title]')].find(b => b.textContent === label || b.hasAttribute('data-map-title') && b.getAttribute('aria-label') === label);
 const key = (element, value, options = {}) => {
   const e = new dom.window.KeyboardEvent('keydown', { key: value, bubbles: true, cancelable: true, ...options }); element.dispatchEvent(e); return e;
 };
@@ -29,6 +29,78 @@ async function setup(count = 3) {
   document.body.append(view.contentEl); await view.onOpen();
   return { view, plugin, data, area };
 }
+test('selected node text keeps native copying and deletion without selecting, editing or deleting tasks', async () => {
+  const { view, data } = await setup();
+  try {
+    const before = data.get(CURRENT), title = find(view.contentEl, '○ 任务1');
+    const range = document.createRange(); range.setStart(title.firstChild, 0); range.setEnd(title.firstChild, 2);
+    const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+    assert.equal(selection.toString(), '任务');
+    title.click(); await tick();
+    assert.equal(view.selected, null); assert.equal(selection.toString(), '任务');
+    const copy = key(title, 'c', { ctrlKey: true }); assert.equal(copy.defaultPrevented, false);
+    const del = key(title, 'Delete'); assert.equal(del.defaultPrevented, false); await tick();
+    title.dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true })); await tick();
+    assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null);
+    assert.equal(data.get(CURRENT), before);
+    selection.removeAllRanges(); title.click(); await tick();
+    key(title, 'F2'); await tick(); assert.ok(view.contentEl.querySelector('.obsb-task-inline-title'));
+  } finally { document.getSelection().removeAllRanges(); await view.onClose(); view.contentEl.remove(); }
+});
+
+test('date shortcuts update both inputs and results without writing task data', async () => {
+  const { view, plugin, data } = await setup();
+  try {
+    const root = view.contentEl, before = data.get(CURRENT);
+    const now = new Date(), day = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
+    monday.setDate(monday.getDate() - (monday.getDay() + 6) % 7);
+    for (const [title, offset, length] of [['上周', -7, 6], ['本周', 0, 6], ['今天', null, 0]]) {
+      const start = offset === null ? new Date(now) : new Date(monday);
+      if (offset !== null) start.setDate(start.getDate() + offset);
+      const end = new Date(start); end.setDate(end.getDate() + length);
+      find(root, title).click(); await tick();
+      assert.equal(root.querySelector('[aria-label="完成开始日期"]').value, day(start));
+      assert.equal(root.querySelector('[aria-label="完成结束日期"]').value, day(end));
+      assert.equal(!!find(root, '✓ 任务2'), title !== '上周');
+    }
+    find(root, '切换列表').click(); await tick();
+    assert.equal(root.querySelectorAll('.obsb-task-row').length, 1);
+    find(root, '清除日期').click(); await tick();
+    assert.equal(root.querySelectorAll('.obsb-task-row').length, 2);
+    assert.equal(data.get(CURRENT), before);
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
+
+test('completion date filters follow the regular map, list and archive', async () => {
+  const { view, plugin } = await setup();
+  try {
+    const board = await plugin.store.load();
+    await plugin.store.change(board.revision, current => ({ ...current, nodes: current.nodes.map(node =>
+      node.status === 'done' ? { ...node, completed: new Date(2026, 5, 16, 12).toISOString() } : node) }));
+    await view.reload();
+    const root = view.contentEl;
+    const date = label => root.querySelector(`[aria-label="${label}"]`);
+    assert.equal(find(root, '时间回顾'), undefined);
+    inputValue(date('完成开始日期'), '2026-06-16');
+    inputValue(date('完成结束日期'), '2026-06-16');
+    assert.ok(find(root, '✓ 任务2')); assert.ok(find(root, 'AAA领域')); assert.equal(find(root, '○ 任务1'), undefined);
+    find(root, '切换列表').click(); await tick();
+    assert.equal(root.querySelectorAll('.obsb-task-row').length, 1);
+    assert.match(root.querySelector('.obsb-task-row').textContent, /任务2/);
+    inputValue(date('完成结束日期'), '2026-06-15');
+    assert.match(root.textContent, /日期范围无效/);
+    find(root, '清除日期').click(); await tick();
+    assert.equal(root.querySelectorAll('.obsb-task-row').length, 2);
+    await view.archive(); find(Modal.opened.at(-1).contentEl, '确认').click(); await tick();
+    inputValue(date('完成开始日期'), '2026-06-16');
+    assert.equal(root.querySelectorAll('.obsb-task-row').length, 0);
+    find(root, '任务归档').click(); await tick();
+    assert.equal(date('完成开始日期').value, '2026-06-16');
+    assert.match(root.querySelector('.obsb-task-row').textContent, /任务2/);
+  } finally { await view.onClose(); view.contentEl.remove(); }
+});
+
 test('inline title grows and shrinks before autosave, preserves composition, caret and editor DOM', async () => {
   const { view, plugin } = await setup();
   try {
