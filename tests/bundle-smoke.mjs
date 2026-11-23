@@ -62,8 +62,12 @@ dot.click(); await tick(); assert.equal(view.contentEl.querySelector('.obsb-map-
 view.contentEl.querySelector('.obsb-core-node.root [data-map-title]').click(); await tick();
 assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null);
 const childTitle = [...view.contentEl.querySelectorAll('[data-map-title]')].find(e => e.textContent === '新任务');
-childTitle.click(); await tick(); press(stage(), 'F2'); await tick();
-input = view.contentEl.querySelector('.obsb-task-inline-title'); input.value = '点击别处退出'; input.dispatchEvent(new dom.window.Event('input'));
+assert.equal(childTitle.tagName, 'BUTTON');
+childTitle.dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true, cancelable: true })); await tick();
+input = view.contentEl.querySelector('.obsb-task-inline-title'); assert.ok(input);
+input.setSelectionRange(0, 2); assert.equal(input.value.slice(input.selectionStart, input.selectionEnd), '新任');
+assert.equal(press(input, 'Delete'), true, 'native text editing must not delete graph nodes');
+input.value = '点击别处退出'; input.dispatchEvent(new dom.window.Event('input'));
 view.contentEl.querySelector('.obsb-core-node.root [data-map-title]').click(); await tick();
 assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null);
 assert.ok((await plugin.store.load()).nodes.some(n => n.title === '点击别处退出'));

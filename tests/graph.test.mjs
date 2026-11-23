@@ -93,21 +93,17 @@ test('pointer-captured clicks and touch taps still select nodes; editors keep na
   assert.equal(pointer(input, 'pointerdown', 30, 40).defaultPrevented, false); pointer(document, 'pointermove', 100, 100); pointer(document, 'pointerup', 100, 100);
   assert.equal(calls.length, 0); v.destroy(); element.remove();
 });
-test('plain title drags and double clicks keep native text selection; edges and modified clicks keep graph gestures', () => {
-  for (const readonly of [false, true]) {
-    const { element, camera, calls, v } = viewport(readonly);
-    const card = document.createElement('div'), title = document.createElement('span');
-    card.dataset.nodeId = 'node-a'; title.dataset.mapTitle = 'true'; title.textContent = '可自由选择的文字'; card.append(title); element.append(card);
-    assert.equal(pointer(title, 'pointerdown', 30, 40).defaultPrevented, false);
-    pointer(document, 'pointermove', 130, 40); pointer(document, 'pointerup', 130, 40);
-    const double = new dom.window.MouseEvent('dblclick', { bubbles: true, cancelable: true }); title.dispatchEvent(double);
-    assert.equal(double.defaultPrevented, false); assert.deepEqual(calls, []);
-    pointer(title, 'pointerdown', 30, 40, { ctrlKey: true }); pointer(document, 'pointerup', 30, 40);
-    assert.ok(calls.some(c => c[0] === 'select')); calls.length = 0;
-    pointer(title, 'pointerdown', 30, 40, { button: 2 }); pointer(document, 'pointermove', 130, 40, { button: 2 }); pointer(document, 'pointerup', 130, 40, { button: 2 });
-    assert.equal(camera.x, 200); assert.equal(calls.some(c => c[0] === 'move'), false);
-    v.destroy(); element.remove();
-  }
+test('node title starts graph dragging and double-click editing again', () => {
+  const { element, calls, v } = viewport();
+  const card = document.createElement('div'), title = document.createElement('button');
+  card.dataset.nodeId = 'node-a'; title.dataset.mapTitle = 'true'; title.textContent = '任务名称'; card.append(title); element.append(card);
+  assert.equal(pointer(title, 'pointerdown', 30, 40).defaultPrevented, true);
+  pointer(document, 'pointermove', 130, 40);
+  assert.ok(element.classList.contains('is-node-dragging'));
+  pointer(document, 'pointercancel', 130, 40);
+  const double = new dom.window.MouseEvent('dblclick', { bubbles: true, cancelable: true }); title.dispatchEvent(double);
+  assert.equal(double.defaultPrevented, true); assert.ok(calls.some(c => c[0] === 'edit' && c[1] === 'node-a'));
+  v.destroy(); element.remove();
 });
 
 test('drag placement recognizes child, before, after; readonly cannot move', () => {

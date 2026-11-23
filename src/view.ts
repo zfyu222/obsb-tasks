@@ -178,11 +178,6 @@ export class TaskView extends ItemView {
     card.title = node.title + (node.kind === 'task' ? `\n${STATUS[node.status]} · 重要程度：${IMPORTANCE[node.importance]}${node.deadline ? ` · 截止：${node.deadline}` : ''}` : '\n领域') + (node.notes ? '\n有注释，选中后在右侧查看' : '');
   }
   private diagramKey(event: KeyboardEvent): void {
-    const selection = this.contentEl.ownerDocument.getSelection();
-    if (selection && !selection.isCollapsed && selection.anchorNode && this.stage?.contains(selection.anchorNode)) {
-      // Let the browser copy/navigate selected text without invoking graph commands.
-      event.stopPropagation(); return;
-    }
     if (this.source !== 'current' || this.mode !== 'map' || event.isComposing || event.keyCode === 229) return;
     if ((event.ctrlKey || event.metaKey) && !event.altKey && ['z', 'y'].includes(event.key.toLowerCase())) {
       event.preventDefault(); event.stopPropagation(); if (!event.repeat) void this.run(() => this.undo(event.key.toLowerCase() === 'y' || event.shiftKey)).catch(report); return;
@@ -488,8 +483,8 @@ export class TaskView extends ItemView {
     tool('收起全部', '收起全部分支', () => this.run(async () => { await this.flush(); this.collapsed = new Set(this.nodes.map(n => n.id)); this.draw(); }));
     tool('展开全部', '展开全部分支', () => this.run(async () => { await this.flush(); this.collapsed.clear(); this.draw(); }));
     el(this.stage, 'div', this.source === 'current'
-      ? '拖选文字后 Ctrl/Cmd+C 复制 · 拖节点边缘移动 · 右键平移 · 空白框选 · Ctrl 滚轮缩放 · Tab 子任务 / Enter 同级 · F2 / Space 编辑'
-      : '拖选文字后 Ctrl/Cmd+C 复制 · 右键平移 · Ctrl 滚轮缩放 · 历史视图只读', 'obsb-task-hint');
+      ? '右键拖动画布 · 左键框选 / 拖动节点 · Ctrl 滚轮缩放 · Tab 子任务 / Enter 同级 · Space 编辑'
+      : '右键平移 · Ctrl 滚轮缩放 · 历史视图只读', 'obsb-task-hint');
     this.graph = new GraphCanvas(this.stage, this.geometry(matches), this.camera, {
       selected: () => this.selectedIds,
       select: (ids, primary) => { void this.run(() => this.selectMany(ids, primary)).catch(report); },
@@ -506,16 +501,15 @@ export class TaskView extends ItemView {
         if (n && !matches.has(n.id)) card.classList.add('context');
         if (n && this.inlineId === n.id) this.titleInput(card, n);
         else {
-          const title = el(card, 'span', n?.title ?? 'root');
-          title.tabIndex = 0; title.setAttribute('role', 'button'); title.dataset.mapTitle = 'true';
+          const title = el(card, 'button', n?.title ?? 'root');
+          title.type = 'button'; title.dataset.mapTitle = 'true';
           title.addEventListener('click', event => {
-            const selection = title.ownerDocument.getSelection();
-            if (selection && !selection.isCollapsed && selection.anchorNode && this.stage.contains(selection.anchorNode)) return;
             const id = n?.id;
             const ids = new Set(event.ctrlKey || event.metaKey || event.shiftKey ? this.selectedIds : []);
             if (id) { if (ids.has(id)) ids.delete(id); else ids.add(id); }
             void this.run(() => this.selectMany([...ids], id)).catch(report);
           });
+          if (n) title.addEventListener('dblclick', () => { void this.run(async () => { if (this.selected !== n.id) await this.select(n.id); await this.beginTitle(); }).catch(report); });
         }
         if (n) this.mapAppearance(card, n);
         const id = n?.id, count = this.tree.children.get(id ?? null)?.length ?? 0;

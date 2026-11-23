@@ -29,23 +29,24 @@ async function setup(count = 3) {
   document.body.append(view.contentEl); await view.onOpen();
   return { view, plugin, data, area };
 }
-test('selected node text keeps native copying and deletion without selecting, editing or deleting tasks', async () => {
+test('double-click title opens an editor with freely selectable text and native editing keys', async () => {
   const { view, data } = await setup();
   try {
     const before = data.get(CURRENT), title = find(view.contentEl, '○ 任务1');
-    const range = document.createRange(); range.setStart(title.firstChild, 0); range.setEnd(title.firstChild, 2);
-    const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range);
-    assert.equal(selection.toString(), '任务');
-    title.click(); await tick();
-    assert.equal(view.selected, null); assert.equal(selection.toString(), '任务');
-    const copy = key(title, 'c', { ctrlKey: true }); assert.equal(copy.defaultPrevented, false);
-    const del = key(title, 'Delete'); assert.equal(del.defaultPrevented, false); await tick();
-    title.dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true })); await tick();
-    assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null);
+    assert.equal(title.tagName, 'BUTTON');
+    title.dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true, cancelable: true })); await tick();
+    const input = view.contentEl.querySelector('.obsb-task-inline-title');
+    assert.ok(input); assert.equal(document.activeElement, input);
+    assert.equal(input.selectionStart, 0); assert.equal(input.selectionEnd, input.value.length);
+    input.setSelectionRange(0, 2);
+    assert.equal(input.value.slice(input.selectionStart, input.selectionEnd), '任务');
+    assert.equal(key(input, 'c', { ctrlKey: true }).defaultPrevented, false);
+    assert.equal(key(input, 'Delete').defaultPrevented, false);
+    assert.equal(key(input, 'ArrowRight', { shiftKey: true }).defaultPrevented, false);
     assert.equal(data.get(CURRENT), before);
-    selection.removeAllRanges(); title.click(); await tick();
-    key(title, 'F2'); await tick(); assert.ok(view.contentEl.querySelector('.obsb-task-inline-title'));
-  } finally { document.getSelection().removeAllRanges(); await view.onClose(); view.contentEl.remove(); }
+    key(input, 'Escape'); await tick();
+    assert.equal(view.contentEl.querySelector('.obsb-task-inline-title'), null);
+  } finally { await view.onClose(); view.contentEl.remove(); }
 });
 
 test('date shortcuts update both inputs and results without writing task data', async () => {
